@@ -1086,28 +1086,41 @@ ScrollFrame.BackgroundTransparency = 1
 ScrollFrame.BorderSizePixel = 0
 ScrollFrame.ScrollBarThickness = 3
 ScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
-ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ScrollFrame.Parent = TeleportPanel
 
--- ═══════════════════════════════════════════
---              COLLAPSIBLE SECTIONS SYSTEM (FIXED)
--- ═══════════════════════════════════════════
+-- Main container that holds everything
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.new(1, 0, 0, 0)
+mainContainer.BackgroundTransparency = 1
+mainContainer.Parent = ScrollFrame
 
+local mainLayout = Instance.new("UIListLayout")
+mainLayout.Padding = UDim.new(0, 8)
+mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+mainLayout.Parent = mainContainer
+
+mainLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    mainContainer.Size = UDim2.new(1, 0, 0, mainLayout.AbsoluteContentSize.Y)
+    ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, mainLayout.AbsoluteContentSize.Y + 20)
+end)
+
+-- ═══════════════════════════════════════════
+--              COLLAPSIBLE SECTION
+-- ═══════════════════════════════════════════
 local function CreateCollapsibleSection(parent, title, icon)
     local isExpanded = false
-    local contentHeight = 0
+    local contentHeight = 200 -- Fixed height for scrollable content
     
     -- Section Container
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -16, 0, 44)
+    container.Size = UDim2.new(1, -16, 0, 48)
     container.BackgroundTransparency = 1
-    container.ClipsDescendants = false
     container.Parent = parent
     
     -- Header Button
     local header = Instance.new("TextButton")
-    header.Size = UDim2.new(1, 0, 0, 44)
+    header.Size = UDim2.new(1, 0, 0, 48)
     header.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
     header.BackgroundTransparency = 0.4
     header.Text = ""
@@ -1145,39 +1158,45 @@ local function CreateCollapsibleSection(parent, title, icon)
     arrow.TextXAlignment = Enum.TextXAlignment.Center
     arrow.Parent = header
     
-    -- Content Container (starts collapsed)
+    -- Content Container
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, 0, 0, 0)
-    content.Position = UDim2.new(0, 0, 0, 48)
+    content.Position = UDim2.new(0, 0, 0, 52)
     content.BackgroundTransparency = 1
     content.ClipsDescendants = true
     content.Parent = container
     
-    -- Content Scrolling Frame (for scrollable content inside)
+    -- Scrolling Frame for content (always scrollable)
     local contentScroll = Instance.new("ScrollingFrame")
     contentScroll.Size = UDim2.new(1, 0, 1, 0)
-    contentScroll.BackgroundTransparency = 1
+    contentScroll.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
+    contentScroll.BackgroundTransparency = 0.3
     contentScroll.BorderSizePixel = 0
-    contentScroll.ScrollBarThickness = 2
+    contentScroll.ScrollBarThickness = 3
     contentScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
-    contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     contentScroll.Parent = content
+    Instance.new("UICorner", contentScroll).CornerRadius = UDim.new(0, 6)
     
     local contentLayout = Instance.new("UIListLayout")
     contentLayout.Padding = UDim.new(0, 4)
     contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
     contentLayout.Parent = contentScroll
     
-    -- Function to update container size based on content
-    local function UpdateContainerSize()
+    -- Function to update container size
+    local function UpdateSize()
         if isExpanded then
-            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
             container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
             content.Size = UDim2.new(1, 0, 0, contentHeight)
         else
             container.Size = UDim2.new(1, -16, 0, 48)
             content.Size = UDim2.new(1, 0, 0, 0)
+        end
+        -- Force layout update
+        task.wait()
+        if parent.Parent and parent.Parent:IsA("ScrollingFrame") then
+            parent.Parent.CanvasSize = UDim2.new(0, 0, 0, parent.Parent.CanvasSize.Y.Offset)
         end
     end
     
@@ -1187,26 +1206,19 @@ local function CreateCollapsibleSection(parent, title, icon)
         local targetArrow = isExpanded and "▼" or "▶"
         
         if isExpanded then
-            -- Expand: set content height first, then animate
-            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
-            content.Size = UDim2.new(1, 0, 0, contentHeight)
-            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
             TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
                 Size = UDim2.new(1, 0, 0, contentHeight)
             }):Play()
+            TweenService:Create(container, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(1, -16, 0, 48 + contentHeight)
+            }):Play()
         else
-            -- Collapse: animate to zero
             TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
                 Size = UDim2.new(1, 0, 0, 0)
             }):Play()
             TweenService:Create(container, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
                 Size = UDim2.new(1, -16, 0, 48)
             }):Play()
-            task.delay(0.26, function()
-                if not isExpanded then
-                    content.Size = UDim2.new(1, 0, 0, 0)
-                end
-            end)
         end
         
         TweenService:Create(arrow, TweenInfo.new(0.2), {
@@ -1217,22 +1229,24 @@ local function CreateCollapsibleSection(parent, title, icon)
             BackgroundTransparency = isExpanded and 0.2 or 0.4
         }):Play()
         
-        -- Force layout update
-        task.wait(0.05)
-        local parent = container.Parent
-        if parent and parent:IsA("ScrollingFrame") then
-            parent.CanvasSize = UDim2.new(0, 0, 0, parent.CanvasSize.Y.Offset)
-        end
+        -- Update layout
+        task.delay(0.3, function()
+            if parent.Parent and parent.Parent:IsA("ScrollingFrame") then
+                parent.Parent.CanvasSize = UDim2.new(0, 0, 0, parent.Parent.CanvasSize.Y.Offset)
+            end
+        end)
     end
     
     header.MouseButton1Click:Connect(ToggleSection)
     
-    -- Function to refresh content and update height
+    -- Function to refresh content
     local function RefreshContent(buttons)
         -- Clear existing
         for _, child in ipairs(contentScroll:GetChildren()) do
-            if child:IsA("TextButton") or child:IsA("TextLabel") then
-                child:Destroy()
+            if child:IsA("TextButton") or child:IsA("TextLabel") or child:IsA("Frame") then
+                if child ~= contentLayout then
+                    child:Destroy()
+                end
             end
         end
         
@@ -1241,16 +1255,12 @@ local function CreateCollapsibleSection(parent, title, icon)
             btn.Parent = contentScroll
         end
         
-        -- Update canvas size
-        task.wait(0.05)
-        if isExpanded then
-            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
-            content.Size = UDim2.new(1, 0, 0, contentHeight)
-            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
-        end
+        -- Update canvas size after buttons added
+        task.wait(0.1)
+        contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentScroll.CanvasSize.Y.Offset)
     end
     
-    return container, contentScroll, RefreshContent, function() return isExpanded end
+    return container, contentScroll, RefreshContent, ToggleSection
 end
 
 -- ═══════════════════════════════════════════
@@ -1351,9 +1361,9 @@ end
 -- ═══════════════════════════════════════════
 --              EVIL THEMED TELEPORT BUTTONS
 -- ═══════════════════════════════════════════
-local function MakeTpButton(parent, displayText, onClick)
+local function MakeTpButton(displayText, onClick)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.Size = UDim2.new(1, 0, 0, 36)
     btn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
     btn.BackgroundTransparency = 0.4
     btn.TextColor3 = Color3.fromRGB(200, 160, 220)
@@ -1363,7 +1373,6 @@ local function MakeTpButton(parent, displayText, onClick)
     btn.TextXAlignment = Enum.TextXAlignment.Left
     btn.AutoButtonColor = false
     btn.ClipsDescendants = true
-    btn.Parent = parent
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
     local pad = Instance.new("UIPadding")
@@ -1496,19 +1505,10 @@ end
 -- ═══════════════════════════════════════════
 --              BUILD TELEPORT UI
 -- ═══════════════════════════════════════════
-local mainContainer = Instance.new("Frame")
-mainContainer.Size = UDim2.new(1, 0, 1, 0)
-mainContainer.BackgroundTransparency = 1
-mainContainer.Parent = ScrollFrame
 
-local mainLayout = Instance.new("UIListLayout")
-mainLayout.Padding = UDim.new(0, 8)
-mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
-mainLayout.Parent = mainContainer
-
--- Quick Teleport Section
+-- Quick Teleport Section (always visible)
 local quickHeader = Instance.new("Frame")
-quickHeader.Size = UDim2.new(1, -16, 0, 44)
+quickHeader.Size = UDim2.new(1, -16, 0, 48)
 quickHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 quickHeader.BackgroundTransparency = 0.4
 quickHeader.Parent = mainContainer
@@ -1525,13 +1525,8 @@ quickTitle.TextSize = 13
 quickTitle.TextXAlignment = Enum.TextXAlignment.Left
 quickTitle.Parent = quickHeader
 
--- Namekian Ship Button (inside quick teleport area)
-local shipContainer = Instance.new("Frame")
-shipContainer.Size = UDim2.new(1, -16, 0, 40)
-shipContainer.BackgroundTransparency = 1
-shipContainer.Parent = mainContainer
-
-local shipBtn = MakeTpButton(shipContainer, "🚀  Namekian Ship", function()
+-- Namekian Ship Button
+local shipBtn = MakeTpButton("🚀  Namekian Ship", function()
     local interactFolder = Workspace:FindFirstChild("Interactable")
     local ship = interactFolder and interactFolder:FindFirstChild("NamekianShip")
     if ship then
@@ -1539,18 +1534,18 @@ local shipBtn = MakeTpButton(shipContainer, "🚀  Namekian Ship", function()
         if pos then StartTravel("Namekian Ship", pos) end
     end
 end)
-shipBtn.Size = UDim2.new(1, 0, 0, 36)
+shipBtn.Parent = mainContainer
 
 -- Create Collapsible Sections
-local raidContainer, raidScroll, RefreshRaid, _ = CreateCollapsibleSection(mainContainer, "RAIDS", "⚔️")
-local dungeonContainer, dungeonScroll, RefreshDungeon, _ = CreateCollapsibleSection(mainContainer, "DUNGEONS", "🏰")
-local worldContainer, worldScroll, RefreshWorld, _ = CreateCollapsibleSection(mainContainer, "WORLD LOCATIONS", "🌍")
-local questContainer, questScroll, RefreshQuest, _ = CreateCollapsibleSection(mainContainer, "QUEST GIVERS", "📜")
-local dragonContainer, dragonScroll, RefreshDragon, _ = CreateCollapsibleSection(mainContainer, "DRAGON BALL QUESTS", "🐉")
+local raidContainer, raidScroll, RefreshRaid = CreateCollapsibleSection(mainContainer, "RAIDS", "⚔️")
+local dungeonContainer, dungeonScroll, RefreshDungeon = CreateCollapsibleSection(mainContainer, "DUNGEONS", "🏰")
+local worldContainer, worldScroll, RefreshWorld = CreateCollapsibleSection(mainContainer, "WORLD LOCATIONS", "🌍")
+local questContainer, questScroll, RefreshQuest = CreateCollapsibleSection(mainContainer, "QUEST GIVERS", "📜")
+local dragonContainer, dragonScroll, RefreshDragon = CreateCollapsibleSection(mainContainer, "DRAGON BALL QUESTS", "🐉")
 
 -- Custom Teleport Section
 local customHeader = Instance.new("Frame")
-customHeader.Size = UDim2.new(1, -16, 0, 44)
+customHeader.Size = UDim2.new(1, -16, 0, 48)
 customHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 customHeader.BackgroundTransparency = 0.4
 customHeader.Parent = mainContainer
@@ -1568,14 +1563,14 @@ customTitle.TextXAlignment = Enum.TextXAlignment.Left
 customTitle.Parent = customHeader
 
 local customFrame = Instance.new("Frame")
-customFrame.Size = UDim2.new(1, -16, 0, 80)
+customFrame.Size = UDim2.new(1, -16, 0, 88)
 customFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 customFrame.BackgroundTransparency = 0.4
 customFrame.Parent = mainContainer
 Instance.new("UICorner", customFrame).CornerRadius = UDim.new(0, 8)
 
 local CustomInput = Instance.new("TextBox")
-CustomInput.Size = UDim2.new(1, -20, 0, 36)
+CustomInput.Size = UDim2.new(1, -20, 0, 40)
 CustomInput.Position = UDim2.new(0, 10, 0, 8)
 CustomInput.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
 CustomInput.BackgroundTransparency = 0.3
@@ -1589,8 +1584,8 @@ CustomInput.Parent = customFrame
 Instance.new("UICorner", CustomInput).CornerRadius = UDim.new(0, 6)
 
 local CustomBtn = Instance.new("TextButton")
-CustomBtn.Size = UDim2.new(1, -20, 0, 32)
-CustomBtn.Position = UDim2.new(0, 10, 0, 48)
+CustomBtn.Size = UDim2.new(1, -20, 0, 36)
+CustomBtn.Position = UDim2.new(0, 10, 0, 52)
 CustomBtn.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
 CustomBtn.BackgroundTransparency = 0.3
 CustomBtn.Text = "TELEPORT TO COORDINATES"
@@ -1639,7 +1634,7 @@ local function RefreshAllSections()
         local buttons = {}
         if #items == 0 then
             local noLabel = Instance.new("TextLabel")
-            noLabel.Size = UDim2.new(1, 0, 0, 32)
+            noLabel.Size = UDim2.new(1, 0, 0, 36)
             noLabel.BackgroundTransparency = 1
             noLabel.Text = "  ⚠ No locations found"
             noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
@@ -1649,7 +1644,7 @@ local function RefreshAllSections()
             table.insert(buttons, noLabel)
         else
             for _, item in ipairs(items) do
-                table.insert(buttons, MakeTpButton(nil, icon .. "  " .. item.name, function()
+                table.insert(buttons, MakeTpButton(icon .. "  " .. item.name, function()
                     StartTravel(item.name, item.getPos())
                 end))
             end
