@@ -2426,6 +2426,8 @@ AutoPanel.Visible = false
 AutoPanel.Parent = ContentArea
 ContentPanels["Auto"] = AutoPanel
 
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
 -- Create a scrolling frame for the autofarmer UI
 local AutoScroll = Instance.new("ScrollingFrame")
 AutoScroll.Size = UDim2.new(1, 0, 1, 0)
