@@ -1518,7 +1518,7 @@ local quickTitle = Instance.new("TextLabel")
 quickTitle.Size = UDim2.new(1, 0, 1, 0)
 quickTitle.Position = UDim2.new(0, 12, 0, 0)
 quickTitle.BackgroundTransparency = 1
-quickTitle.Text = "⚡  QUICK TELEPORTS"
+quickTitle.Text = " QUICK TELEPORTS"
 quickTitle.TextColor3 = Color3.fromRGB(176, 48, 196)
 quickTitle.Font = Enum.Font.GothamBold
 quickTitle.TextSize = 13
@@ -1526,7 +1526,7 @@ quickTitle.TextXAlignment = Enum.TextXAlignment.Left
 quickTitle.Parent = quickHeader
 
 -- Namekian Ship Button
-local shipBtn = MakeTpButton("🚀  Namekian Ship", function()
+local shipBtn = MakeTpButton(" Namekian Ship", function()
     local interactFolder = Workspace:FindFirstChild("Interactable")
     local ship = interactFolder and interactFolder:FindFirstChild("NamekianShip")
     if ship then
@@ -1941,23 +1941,40 @@ InfoStatusLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
 InfoStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 InfoStatusLabel.Parent = InfoPanel
 
--- Scroll frame for player stats
+-- Scroll frame for player stats (FIXED - uses a container frame for proper dynamic sizing)
+local InfoScrollContainer = Instance.new("Frame")
+InfoScrollContainer.Size = UDim2.new(1, -16, 1, -108)
+InfoScrollContainer.Position = UDim2.new(0, 8, 0, 102)
+InfoScrollContainer.BackgroundTransparency = 1
+InfoScrollContainer.ClipsDescendants = true
+InfoScrollContainer.Parent = InfoPanel
+
 local InfoScrollFrame = Instance.new("ScrollingFrame")
-InfoScrollFrame.Size = UDim2.new(1, -16, 1, -108)
-InfoScrollFrame.Position = UDim2.new(0, 8, 0, 102)
+InfoScrollFrame.Size = UDim2.new(1, 0, 1, 0)
 InfoScrollFrame.BackgroundTransparency = 1
 InfoScrollFrame.BorderSizePixel = 0
 InfoScrollFrame.ScrollBarThickness = 3
 InfoScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
 InfoScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-InfoScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-InfoScrollFrame.ClipsDescendants = true  -- ADD THIS LINE - fixes overflow
-InfoScrollFrame.Parent = InfoPanel
+InfoScrollFrame.Parent = InfoScrollContainer
 
-local InfoListLayout = Instance.new("UIListLayout")
-InfoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-InfoListLayout.Padding = UDim.new(0, 4)
-InfoListLayout.Parent = InfoScrollFrame
+-- Content container inside scroll frame (for proper dynamic sizing)
+local InfoContentContainer = Instance.new("Frame")
+InfoContentContainer.Size = UDim2.new(1, 0, 0, 0)
+InfoContentContainer.BackgroundTransparency = 1
+InfoContentContainer.Parent = InfoScrollFrame
+
+local InfoContentLayout = Instance.new("UIListLayout")
+InfoContentLayout.Padding = UDim.new(0, 4)
+InfoContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+InfoContentLayout.Parent = InfoContentContainer
+
+-- Update canvas size when content changes
+InfoContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local contentHeight = InfoContentLayout.AbsoluteContentSize.Y
+    InfoContentContainer.Size = UDim2.new(1, 0, 0, contentHeight)
+    InfoScrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 20)
+end)
 
 -- Stats display helpers
 local infoRows = {}
@@ -1998,7 +2015,7 @@ local function parseToLines(raw)
     return lines
 end
 
--- Expandable row for capsules/hotbar
+-- Expandable row for capsules/hotbar (FIXED - updates canvas size when expanded)
 local function makeExpandableRow(statName, rawValue, order, pipColor)
     local lines = parseToLines(rawValue)
     local isEmpty = (#lines == 0)
@@ -2012,8 +2029,8 @@ local function makeExpandableRow(statName, rawValue, order, pipColor)
     Wrapper.BackgroundTransparency = 1
     Wrapper.BorderSizePixel = 0
     Wrapper.LayoutOrder = order
-    Wrapper.ClipsDescendants = false
-    Wrapper.Parent = InfoScrollFrame
+    Wrapper.ClipsDescendants = true
+    Wrapper.Parent = InfoContentContainer
     table.insert(infoRows, Wrapper)
 
     local Header = Instance.new("TextButton")
@@ -2093,7 +2110,6 @@ local function makeExpandableRow(statName, rawValue, order, pipColor)
     Panel.BorderSizePixel = 0
     Panel.ClipsDescendants = true
     Panel.Parent = Wrapper
-    Instance.new("UICorner", Panel).CornerRadius = UDim.new(0, 6)
 
     local pStroke = Instance.new("UIStroke")
     pStroke.Color = Color3.fromRGB(128, 0, 255)
@@ -2153,6 +2169,12 @@ local function makeExpandableRow(statName, rawValue, order, pipColor)
             hStroke.Color = Color3.fromRGB(156, 39, 176)
             hStroke.Transparency = 0.7
         end
+        
+        -- Force canvas update after animation
+        task.wait(0.25)
+        local contentHeight = InfoContentLayout.AbsoluteContentSize.Y
+        InfoContentContainer.Size = UDim2.new(1, 0, 0, contentHeight)
+        InfoScrollFrame.CanvasSize = UDim2.new(0, 0, 0, contentHeight + 20)
     end)
 
     Header.MouseEnter:Connect(function()
@@ -2176,7 +2198,7 @@ local function makeInfoStatRow(statName, statValue, order, labelColor)
     Row.BackgroundTransparency = 0.4
     Row.BorderSizePixel = 0
     Row.LayoutOrder = order
-    Row.Parent = InfoScrollFrame
+    Row.Parent = InfoContentContainer
     Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
 
     local Stroke = Instance.new("UIStroke")
@@ -2227,7 +2249,7 @@ local function makeInfoLevelBanner(level, order)
     Row.BackgroundTransparency = 0.3
     Row.BorderSizePixel = 0
     Row.LayoutOrder = order
-    Row.Parent = InfoScrollFrame
+    Row.Parent = InfoContentContainer
     Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
 
     local Stroke = Instance.new("UIStroke")
