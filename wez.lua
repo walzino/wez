@@ -3060,10 +3060,6 @@ local function StopFarming()
 end
 
 local function GetNextTarget()
-    if #SelectedNPCs == 0 then
-        StopFarming()
-        return
-    end
     AutoFarmerState.CurrentTargetIndex = AutoFarmerState.CurrentTargetIndex % #SelectedNPCs + 1
     AutoFarmerState.CurrentTarget = SelectedNPCs[AutoFarmerState.CurrentTargetIndex]
     AutoFarmerState.CurrentTargetModel = AutoFarmerState.CurrentTarget.model
@@ -3317,7 +3313,6 @@ end)
 -- Initial update
 task.wait(1)
 UpdateNPCListAuto()
-
 -- ═══════════════════════════════════════════
 --              INTERACTABLES PANEL
 -- ═══════════════════════════════════════════
