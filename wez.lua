@@ -1704,7 +1704,15 @@ task.spawn(function()
     end
 end)
 -- ═══════════════════════════════════════════
---              INFO PANEL
+--              INFO PANEL STAT KEYS
+-- ═══════════════════════════════════════════
+local STAT_KEYS = {
+    "HealthMax", "KiDamage", "KiMax", "KiResist",
+    "PhysDamage", "PhysResist", "Speed"
+}
+
+-- ═══════════════════════════════════════════
+--              INFO PANEL (Player Info Check)
 -- ═══════════════════════════════════════════
 local InfoPanel = Instance.new("Frame")
 InfoPanel.Name = "InfoPanel"
@@ -1714,8 +1722,675 @@ InfoPanel.Visible = false
 InfoPanel.Parent = ContentArea
 ContentPanels["Info"] = InfoPanel
 
--- [INFO PANEL CONTENT - Same as original but with evil colors]
+-- Search section
+local SearchSection = Instance.new("Frame")
+SearchSection.Size = UDim2.new(1, -16, 0, 70)
+SearchSection.Position = UDim2.new(0, 8, 0, 8)
+SearchSection.BackgroundTransparency = 1
+SearchSection.Parent = InfoPanel
 
+local SearchLabel = Instance.new("TextLabel")
+SearchLabel.Size = UDim2.new(1, 0, 0, 20)
+SearchLabel.Position = UDim2.new(0, 0, 0, 0)
+SearchLabel.BackgroundTransparency = 1
+SearchLabel.Text = "PLAYER SEARCH"
+SearchLabel.TextColor3 = Color3.fromRGB(176, 48, 196)
+SearchLabel.Font = Enum.Font.GothamBold
+SearchLabel.TextSize = 11
+SearchLabel.TextXAlignment = Enum.TextXAlignment.Left
+SearchLabel.Parent = SearchSection
+
+local SearchDivider = Instance.new("Frame")
+SearchDivider.Size = UDim2.new(1, 0, 0, 1)
+SearchDivider.Position = UDim2.new(0, 0, 0, 22)
+SearchDivider.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+SearchDivider.BackgroundTransparency = 0.75
+SearchDivider.BorderSizePixel = 0
+SearchDivider.Parent = SearchSection
+
+local SearchInputFrame = Instance.new("Frame")
+SearchInputFrame.Size = UDim2.new(1, 0, 0, 36)
+SearchInputFrame.Position = UDim2.new(0, 0, 0, 28)
+SearchInputFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+SearchInputFrame.BackgroundTransparency = 0.5
+SearchInputFrame.BorderSizePixel = 0
+SearchInputFrame.Parent = SearchSection
+Instance.new("UICorner", SearchInputFrame).CornerRadius = UDim.new(0, 8)
+
+local SearchBox = Instance.new("TextBox")
+SearchBox.Size = UDim2.new(1, -90, 1, 0)
+SearchBox.Position = UDim2.new(0, 10, 0, 0)
+SearchBox.BackgroundTransparency = 1
+SearchBox.PlaceholderText = "Enter username..."
+SearchBox.PlaceholderColor3 = Color3.fromRGB(128, 64, 144)
+SearchBox.Text = ""
+SearchBox.Font = Enum.Font.Gotham
+SearchBox.TextSize = 12
+SearchBox.TextColor3 = Color3.fromRGB(200, 180, 210)
+SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+SearchBox.ClearTextOnFocus = false
+SearchBox.Parent = SearchInputFrame
+
+local SearchBtn = Instance.new("TextButton")
+SearchBtn.Size = UDim2.new(0, 74, 1, -8)
+SearchBtn.Position = UDim2.new(1, -80, 0, 4)
+SearchBtn.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+SearchBtn.BackgroundTransparency = 0.3
+SearchBtn.Text = "CHECK"
+SearchBtn.Font = Enum.Font.GothamBold
+SearchBtn.TextSize = 11
+SearchBtn.TextColor3 = Color3.fromRGB(196, 96, 216)
+SearchBtn.AutoButtonColor = false
+SearchBtn.Parent = SearchInputFrame
+Instance.new("UICorner", SearchBtn).CornerRadius = UDim.new(0, 6)
+
+-- Autocomplete Dropdown
+local DROP_ROW_H = 30
+local DropFrame = Instance.new("Frame")
+DropFrame.Name = "Dropdown"
+DropFrame.Size = UDim2.new(0, 0, 0, 0)
+DropFrame.Position = UDim2.new(0, 8, 0, 106)
+DropFrame.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
+DropFrame.BorderSizePixel = 0
+DropFrame.ClipsDescendants = true
+DropFrame.ZIndex = 30
+DropFrame.Visible = false
+DropFrame.Parent = InfoPanel
+Instance.new("UICorner", DropFrame).CornerRadius = UDim.new(0, 7)
+
+local DropStroke = Instance.new("UIStroke")
+DropStroke.Color = Color3.fromRGB(156, 39, 176)
+DropStroke.Thickness = 1
+DropStroke.Transparency = 0.3
+DropStroke.Parent = DropFrame
+
+local DropListLayout = Instance.new("UIListLayout")
+DropListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+DropListLayout.Parent = DropFrame
+
+local dropButtons = {}
+
+local function getLiveNames()
+    local names = {}
+    local Live = workspace:FindFirstChild("Live")
+    if Live then
+        for _, child in ipairs(Live:GetChildren()) do
+            table.insert(names, child.Name)
+        end
+    end
+    return names
+end
+
+local function filterNames(query, allNames)
+    query = query:lower()
+    local starts, contains = {}, {}
+    for _, name in ipairs(allNames) do
+        local lower = name:lower()
+        if lower:sub(1, #query) == query then
+            table.insert(starts, name)
+        elseif lower:find(query, 1, true) then
+            table.insert(contains, name)
+        end
+    end
+    for _, v in ipairs(contains) do
+        table.insert(starts, v)
+    end
+    return starts
+end
+
+local function hideDropdown()
+    if not DropFrame.Visible then return end
+    TweenService:Create(DropFrame, TweenInfo.new(0.14), {Size = UDim2.new(0, 0, 0, 0)}):Play()
+    task.delay(0.15, function()
+        DropFrame.Visible = false
+        for _, b in ipairs(dropButtons) do
+            b:Destroy()
+        end
+        dropButtons = {}
+    end)
+end
+
+local function showDropdown(names)
+    for _, b in ipairs(dropButtons) do
+        b:Destroy()
+    end
+    dropButtons = {}
+    if #names == 0 then
+        DropFrame.Visible = false
+        return
+    end
+    local maxShow = math.min(#names, 6)
+    for i = 1, maxShow do
+        local name = names[i]
+        local Btn = Instance.new("TextButton")
+        Btn.Size = UDim2.new(1, 0, 0, DROP_ROW_H)
+        Btn.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
+        Btn.Text = ""
+        Btn.LayoutOrder = i
+        Btn.ZIndex = 31
+        Btn.Parent = DropFrame
+
+        local Highlight = Instance.new("Frame")
+        Highlight.Size = UDim2.new(1, 0, 1, 0)
+        Highlight.BackgroundColor3 = Color3.fromRGB(76, 48, 96)
+        Highlight.BackgroundTransparency = 1
+        Highlight.BorderSizePixel = 0
+        Highlight.ZIndex = 31
+        Highlight.Parent = Btn
+
+        local Pip = Instance.new("Frame")
+        Pip.Size = UDim2.new(0, 3, 0.5, 0)
+        Pip.Position = UDim2.new(0, 0, 0.25, 0)
+        Pip.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+        Pip.BorderSizePixel = 0
+        Pip.ZIndex = 32
+        Pip.Parent = Btn
+        Instance.new("UICorner", Pip).CornerRadius = UDim.new(0, 2)
+
+        local NameLbl = Instance.new("TextLabel")
+        NameLbl.Size = UDim2.new(1, -16, 1, 0)
+        NameLbl.Position = UDim2.new(0, 12, 0, 0)
+        NameLbl.BackgroundTransparency = 1
+        NameLbl.Text = name
+        NameLbl.Font = Enum.Font.Gotham
+        NameLbl.TextSize = 13
+        NameLbl.TextColor3 = Color3.fromRGB(176, 128, 196)
+        NameLbl.TextXAlignment = Enum.TextXAlignment.Left
+        NameLbl.ZIndex = 33
+        NameLbl.Parent = Btn
+
+        if i < maxShow then
+            local Div = Instance.new("Frame")
+            Div.Size = UDim2.new(1, -16, 0, 1)
+            Div.Position = UDim2.new(0, 8, 1, -1)
+            Div.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+            Div.BackgroundTransparency = 0.5
+            Div.BorderSizePixel = 0
+            Div.ZIndex = 32
+            Div.Parent = Btn
+        end
+
+        Btn.MouseEnter:Connect(function()
+            TweenService:Create(Highlight, TweenInfo.new(0.1), {BackgroundTransparency = 0}):Play()
+        end)
+        Btn.MouseLeave:Connect(function()
+            TweenService:Create(Highlight, TweenInfo.new(0.1), {BackgroundTransparency = 1}):Play()
+        end)
+        Btn.MouseButton1Click:Connect(function()
+            SearchBox.Text = name
+            hideDropdown()
+            task.spawn(lookupPlayer, name)
+        end)
+        table.insert(dropButtons, Btn)
+    end
+
+    local targetH = maxShow * DROP_ROW_H
+    DropFrame.Size = UDim2.new(0, 380, 0, 0)
+    DropFrame.Visible = true
+    TweenService:Create(DropFrame, TweenInfo.new(0.18), {Size = UDim2.new(0, 380, 0, targetH)}):Play()
+end
+
+local InfoStatusLabel = Instance.new("TextLabel")
+InfoStatusLabel.Size = UDim2.new(1, -16, 0, 16)
+InfoStatusLabel.Position = UDim2.new(0, 8, 0, 82)
+InfoStatusLabel.BackgroundTransparency = 1
+InfoStatusLabel.Text = ""
+InfoStatusLabel.Font = Enum.Font.Gotham
+InfoStatusLabel.TextSize = 11
+InfoStatusLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+InfoStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfoStatusLabel.Parent = InfoPanel
+
+-- Scroll frame for player stats
+local InfoScrollFrame = Instance.new("ScrollingFrame")
+InfoScrollFrame.Size = UDim2.new(1, -16, 1, -108)
+InfoScrollFrame.Position = UDim2.new(0, 8, 0, 102)
+InfoScrollFrame.BackgroundTransparency = 1
+InfoScrollFrame.BorderSizePixel = 0
+InfoScrollFrame.ScrollBarThickness = 3
+InfoScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
+InfoScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+InfoScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+InfoScrollFrame.Parent = InfoPanel
+
+local InfoListLayout = Instance.new("UIListLayout")
+InfoListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+InfoListLayout.Padding = UDim.new(0, 4)
+InfoListLayout.Parent = InfoScrollFrame
+
+-- Stats display helpers
+local infoRows = {}
+
+local function clearInfoRows()
+    for _, row in ipairs(infoRows) do
+        row:Destroy()
+    end
+    infoRows = {}
+end
+
+-- Parse JSON-like string to table
+local function parseToLines(raw)
+    local lines = {}
+    if not raw or raw == "" or raw == "0" or raw == "nil" then
+        return lines
+    end
+
+    for k, v in raw:gmatch('"([^"]+)"%s*:%s*"([^"]+)"') do
+        table.insert(lines, k .. "  →  " .. v)
+    end
+
+    if #lines > 0 then return lines end
+
+    for v in raw:gmatch('"([^"]+)"') do
+        table.insert(lines, v)
+    end
+
+    if #lines > 0 then return lines end
+
+    for part in raw:gmatch("[^,]+") do
+        local trimmed = part:match("^%s*(.-)%s*$")
+        if trimmed and trimmed ~= "" then
+            table.insert(lines, trimmed)
+        end
+    end
+
+    return lines
+end
+
+-- Expandable row for capsules/hotbar
+local function makeExpandableRow(statName, rawValue, order, pipColor)
+    local lines = parseToLines(rawValue)
+    local isEmpty = (#lines == 0)
+
+    local LINE_H = 20
+    local PAD_V = 10
+    local contentH = isEmpty and 40 or (#lines * LINE_H + PAD_V * 2)
+
+    local Wrapper = Instance.new("Frame")
+    Wrapper.Size = UDim2.new(1, 0, 0, 38)
+    Wrapper.BackgroundTransparency = 1
+    Wrapper.BorderSizePixel = 0
+    Wrapper.LayoutOrder = order
+    Wrapper.ClipsDescendants = false
+    Wrapper.Parent = InfoScrollFrame
+    table.insert(infoRows, Wrapper)
+
+    local Header = Instance.new("TextButton")
+    Header.Size = UDim2.new(1, 0, 0, 38)
+    Header.BackgroundColor3 = Color3.fromRGB(25, 16, 32)
+    Header.BackgroundTransparency = 0.4
+    Header.Text = ""
+    Header.BorderSizePixel = 0
+    Header.ZIndex = 4
+    Header.Parent = Wrapper
+    Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 6)
+
+    local hStroke = Instance.new("UIStroke")
+    hStroke.Color = Color3.fromRGB(156, 39, 176)
+    hStroke.Thickness = 1
+    hStroke.Transparency = 0.7
+    hStroke.Parent = Header
+
+    local Pip = Instance.new("Frame")
+    Pip.Size = UDim2.new(0, 3, 0.6, 0)
+    Pip.Position = UDim2.new(0, 0, 0.2, 0)
+    Pip.BackgroundColor3 = pipColor
+    Pip.BorderSizePixel = 0
+    Pip.Parent = Header
+    Instance.new("UICorner", Pip).CornerRadius = UDim.new(0, 2)
+
+    local HLbl = Instance.new("TextLabel")
+    HLbl.Size = UDim2.new(0.65, -14, 1, 0)
+    HLbl.Position = UDim2.new(0, 12, 0, 0)
+    HLbl.BackgroundTransparency = 1
+    HLbl.Text = statName
+    HLbl.Font = Enum.Font.GothamBold
+    HLbl.TextSize = 12
+    HLbl.TextColor3 = pipColor
+    HLbl.TextXAlignment = Enum.TextXAlignment.Left
+    HLbl.Parent = Header
+
+    local Badge = Instance.new("Frame")
+    Badge.Size = UDim2.new(0, 28, 0, 20)
+    Badge.Position = UDim2.new(1, -72, 0.5, -10)
+    Badge.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    Badge.BorderSizePixel = 0
+    Badge.Parent = Header
+    Instance.new("UICorner", Badge).CornerRadius = UDim.new(0, 4)
+
+    local BadgeStroke = Instance.new("UIStroke")
+    BadgeStroke.Color = pipColor
+    BadgeStroke.Thickness = 1
+    BadgeStroke.Transparency = 0.6
+    BadgeStroke.Parent = Badge
+
+    local BadgeLbl = Instance.new("TextLabel")
+    BadgeLbl.Size = UDim2.new(1, 0, 1, 0)
+    BadgeLbl.BackgroundTransparency = 1
+    BadgeLbl.Text = tostring(#lines)
+    BadgeLbl.Font = Enum.Font.GothamBold
+    BadgeLbl.TextSize = 10
+    BadgeLbl.TextColor3 = pipColor
+    BadgeLbl.TextXAlignment = Enum.TextXAlignment.Center
+    BadgeLbl.Parent = Badge
+
+    local HintLbl = Instance.new("TextLabel")
+    HintLbl.Size = UDim2.new(0, 52, 1, 0)
+    HintLbl.Position = UDim2.new(1, -52, 0, 0)
+    HintLbl.BackgroundTransparency = 1
+    HintLbl.Text = "▶  expand"
+    HintLbl.Font = Enum.Font.Gotham
+    HintLbl.TextSize = 10
+    HintLbl.TextColor3 = Color3.fromRGB(128, 64, 144)
+    HintLbl.TextXAlignment = Enum.TextXAlignment.Right
+    HintLbl.Parent = Header
+
+    local Panel = Instance.new("Frame")
+    Panel.Size = UDim2.new(1, 0, 0, 0)
+    Panel.Position = UDim2.new(0, 0, 0, 40)
+    Panel.BackgroundColor3 = Color3.fromRGB(10, 5, 15)
+    Panel.BorderSizePixel = 0
+    Panel.ClipsDescendants = true
+    Panel.Parent = Wrapper
+    Instance.new("UICorner", Panel).CornerRadius = UDim.new(0, 6)
+
+    local pStroke = Instance.new("UIStroke")
+    pStroke.Color = Color3.fromRGB(128, 0, 255)
+    pStroke.Thickness = 1
+    pStroke.Transparency = 0.7
+    pStroke.Parent = Panel
+
+    if not isEmpty then
+        for li, line in ipairs(lines) do
+            local EL = Instance.new("TextLabel")
+            EL.Size = UDim2.new(1, -20, 0, LINE_H)
+            EL.Position = UDim2.new(0, 10, 0, PAD_V + (li - 1) * LINE_H)
+            EL.BackgroundTransparency = 1
+            EL.Text = "• " .. line
+            EL.Font = Enum.Font.Gotham
+            EL.TextSize = 11
+            EL.TextColor3 = Color3.fromRGB(196, 160, 216)
+            EL.TextXAlignment = Enum.TextXAlignment.Left
+            EL.TextWrapped = true
+            EL.TextTruncate = Enum.TextTruncate.AtEnd
+            EL.Parent = Panel
+        end
+    else
+        local NL = Instance.new("TextLabel")
+        NL.Size = UDim2.new(1, -20, 0, 36)
+        NL.Position = UDim2.new(0, 10, 0, 0)
+        NL.BackgroundTransparency = 1
+        NL.Text = "No items found"
+        NL.Font = Enum.Font.Gotham
+        NL.TextSize = 11
+        NL.TextColor3 = Color3.fromRGB(160, 80, 80)
+        NL.TextXAlignment = Enum.TextXAlignment.Left
+        NL.Parent = Panel
+    end
+
+    local expanded = false
+    Header.MouseButton1Click:Connect(function()
+        expanded = not expanded
+        if expanded then
+            Wrapper.Size = UDim2.new(1, 0, 0, 38 + 4 + contentH)
+            TweenService:Create(Panel, TweenInfo.new(0.22, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, contentH)}):Play()
+            HintLbl.Text = "▼  collapse"
+            TweenService:Create(HintLbl, TweenInfo.new(0.15), {TextColor3 = pipColor}):Play()
+            TweenService:Create(Header, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(20, 8, 28)}):Play()
+            hStroke.Color = Color3.fromRGB(128, 0, 255)
+            hStroke.Transparency = 0.3
+        else
+            TweenService:Create(Panel, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+            task.delay(0.19, function()
+                if not expanded then
+                    Wrapper.Size = UDim2.new(1, 0, 0, 38)
+                end
+            end)
+            HintLbl.Text = "▶  expand"
+            TweenService:Create(HintLbl, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(128, 64, 144)}):Play()
+            TweenService:Create(Header, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(25, 16, 32)}):Play()
+            hStroke.Color = Color3.fromRGB(156, 39, 176)
+            hStroke.Transparency = 0.7
+        end
+    end)
+
+    Header.MouseEnter:Connect(function()
+        if not expanded then
+            TweenService:Create(Header, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(30, 20, 38)}):Play()
+        end
+    end)
+    Header.MouseLeave:Connect(function()
+        if not expanded then
+            TweenService:Create(Header, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(25, 16, 32)}):Play()
+        end
+    end)
+
+    return Wrapper
+end
+
+local function makeInfoStatRow(statName, statValue, order, labelColor)
+    local Row = Instance.new("Frame")
+    Row.Size = UDim2.new(1, 0, 0, 38)
+    Row.BackgroundColor3 = Color3.fromRGB(25, 16, 32)
+    Row.BackgroundTransparency = 0.4
+    Row.BorderSizePixel = 0
+    Row.LayoutOrder = order
+    Row.Parent = InfoScrollFrame
+    Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 6)
+
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Color = Color3.fromRGB(156, 39, 176)
+    Stroke.Thickness = 1
+    Stroke.Transparency = 0.7
+    Stroke.Parent = Row
+
+    local Pip = Instance.new("Frame")
+    Pip.Size = UDim2.new(0, 3, 0.6, 0)
+    Pip.Position = UDim2.new(0, 0, 0.2, 0)
+    Pip.BackgroundColor3 = labelColor or Color3.fromRGB(156, 39, 176)
+    Pip.BorderSizePixel = 0
+    Pip.Parent = Row
+    Instance.new("UICorner", Pip).CornerRadius = UDim.new(0, 2)
+
+    local NameLbl = Instance.new("TextLabel")
+    NameLbl.Size = UDim2.new(0.52, -16, 1, 0)
+    NameLbl.Position = UDim2.new(0, 12, 0, 0)
+    NameLbl.BackgroundTransparency = 1
+    NameLbl.Text = statName
+    NameLbl.Font = Enum.Font.GothamBold
+    NameLbl.TextSize = 12
+    NameLbl.TextColor3 = Color3.fromRGB(240, 190, 50)
+    NameLbl.TextXAlignment = Enum.TextXAlignment.Left
+    NameLbl.Parent = Row
+
+    local displayVal = tostring(statValue)
+    local ValLbl = Instance.new("TextLabel")
+    ValLbl.Size = UDim2.new(0.48, -10, 1, 0)
+    ValLbl.Position = UDim2.new(0.52, 0, 0, 0)
+    ValLbl.BackgroundTransparency = 1
+    ValLbl.Text = displayVal
+    ValLbl.Font = Enum.Font.Gotham
+    ValLbl.TextSize = 12
+    ValLbl.TextColor3 = (displayVal == "None" or displayVal == "—") and Color3.fromRGB(160, 80, 80) or Color3.fromRGB(200, 180, 210)
+    ValLbl.TextXAlignment = Enum.TextXAlignment.Right
+    ValLbl.Parent = Row
+
+    table.insert(infoRows, Row)
+    return Row
+end
+
+local function makeInfoLevelBanner(level, order)
+    local Row = Instance.new("Frame")
+    Row.Size = UDim2.new(1, 0, 0, 48)
+    Row.BackgroundColor3 = Color3.fromRGB(20, 8, 28)
+    Row.BackgroundTransparency = 0.3
+    Row.BorderSizePixel = 0
+    Row.LayoutOrder = order
+    Row.Parent = InfoScrollFrame
+    Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 8)
+
+    local Stroke = Instance.new("UIStroke")
+    Stroke.Color = Color3.fromRGB(156, 39, 176)
+    Stroke.Thickness = 1.5
+    Stroke.Transparency = 0.3
+    Stroke.Parent = Row
+
+    local Stars = Instance.new("TextLabel")
+    Stars.Size = UDim2.new(0, 60, 1, 0)
+    Stars.Position = UDim2.new(0, 10, 0, 0)
+    Stars.BackgroundTransparency = 1
+    Stars.Text = "★  ★  ★"
+    Stars.Font = Enum.Font.GothamBold
+    Stars.TextSize = 10
+    Stars.TextColor3 = Color3.fromRGB(176, 48, 196)
+    Stars.TextXAlignment = Enum.TextXAlignment.Left
+    Stars.Parent = Row
+
+    local Lbl = Instance.new("TextLabel")
+    Lbl.Size = UDim2.new(0, 80, 1, 0)
+    Lbl.Position = UDim2.new(0, 70, 0, 0)
+    Lbl.BackgroundTransparency = 1
+    Lbl.Text = "LEVEL"
+    Lbl.Font = Enum.Font.GothamBold
+    Lbl.TextSize = 13
+    Lbl.TextColor3 = Color3.fromRGB(196, 96, 216)
+    Lbl.TextXAlignment = Enum.TextXAlignment.Left
+    Lbl.Parent = Row
+
+    local Val = Instance.new("TextLabel")
+    Val.Size = UDim2.new(0, 110, 1, 0)
+    Val.Position = UDim2.new(1, -118, 0, 0)
+    Val.BackgroundTransparency = 1
+    Val.Text = tostring(level)
+    Val.Font = Enum.Font.GothamBold
+    Val.TextSize = 22
+    Val.TextColor3 = Color3.fromRGB(216, 128, 255)
+    Val.TextXAlignment = Enum.TextXAlignment.Right
+    Val.Parent = Row
+
+    table.insert(infoRows, Row)
+    return Row
+end
+
+-- Main lookup function
+local function lookupPlayer(username)
+    username = tostring(username):match("^%s*(.-)%s*$")
+    if username == "" then
+        InfoStatusLabel.Text = "⚠ Enter a username."
+        InfoStatusLabel.TextColor3 = Color3.fromRGB(220, 55, 38)
+        return
+    end
+
+    clearInfoRows()
+    InfoStatusLabel.Text = "Searching..."
+    InfoStatusLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+
+    local Live = workspace:FindFirstChild("Live")
+    if not Live then
+        InfoStatusLabel.Text = "✖ 'Live' not found in Workspace."
+        InfoStatusLabel.TextColor3 = Color3.fromRGB(220, 55, 38)
+        return
+    end
+
+    local pFolder = Live:FindFirstChild(username)
+    if not pFolder then
+        InfoStatusLabel.Text = "✖ '" .. username .. "' not in Workspace.Live."
+        InfoStatusLabel.TextColor3 = Color3.fromRGB(220, 55, 38)
+        return
+    end
+
+    InfoStatusLabel.Text = "✔ " .. username
+    InfoStatusLabel.TextColor3 = Color3.fromRGB(176, 48, 196)
+    local order = 0
+
+    -- Level
+    local LevelVal = pFolder:FindFirstChild("Level")
+    order = order + 1
+    makeInfoLevelBanner(LevelVal and LevelVal.Value or "?", order)
+
+    -- Combat Stats
+    local StatsFolder = pFolder:FindFirstChild("Stats")
+    if StatsFolder then
+        for i, key in ipairs(STAT_KEYS) do
+            order = order + 1
+            local v = StatsFolder:FindFirstChild(key)
+            makeInfoStatRow(key, v and tostring(v.Value) or "—", order, Color3.fromRGB(156, 39, 176))
+        end
+    else
+        order = order + 1
+        makeInfoStatRow("Stats", "— folder not found —", order, Color3.fromRGB(220, 55, 38))
+    end
+
+    -- ReplicatedStats
+    local rPlayer = Players:FindFirstChild(username)
+    local RepStats = rPlayer and rPlayer:FindFirstChild("ReplicatedStats")
+
+    if RepStats then
+        -- Accessories
+        for i, key in ipairs({"Accessory1", "Accessory2", "Accessory3"}) do
+            order = order + 1
+            local v = RepStats:FindFirstChild(key)
+            local raw = v and tostring(v.Value) or ""
+            local display = (raw == "" or raw == "0" or raw == "nil") and "None" or raw
+            makeInfoStatRow(key, display, order, Color3.fromRGB(216, 96, 196))
+        end
+
+        -- Zenni
+        order = order + 1
+        local zv = RepStats:FindFirstChild("Zenni")
+        makeInfoStatRow("Zenni", zv and tostring(zv.Value) or "—", order, Color3.fromRGB(240, 190, 40))
+
+        -- EquippedCapsules (Expandable)
+        order = order + 1
+        local cv = RepStats:FindFirstChild("EquippedCapsules")
+        makeExpandableRow("Equipped Capsules", cv and cv.Value or "", order, Color3.fromRGB(176, 96, 255))
+
+        -- Hotbar (Expandable)
+        order = order + 1
+        local hv = RepStats:FindFirstChild("Hotbar")
+        makeExpandableRow("Hotbar", hv and hv.Value or "", order, Color3.fromRGB(196, 96, 216))
+    else
+        order = order + 1
+        makeInfoStatRow("ReplicatedStats", "— not accessible —", order, Color3.fromRGB(220, 55, 38))
+    end
+end
+
+-- Search box events with autocomplete
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = SearchBox.Text
+    if q == "" then
+        hideDropdown()
+        return
+    end
+    showDropdown(filterNames(q, getLiveNames()))
+end)
+
+SearchBox.FocusLost:Connect(function(enter)
+    if enter then
+        hideDropdown()
+        lookupPlayer(SearchBox.Text)
+    end
+end)
+
+SearchBtn.MouseButton1Click:Connect(function()
+    hideDropdown()
+    lookupPlayer(SearchBox.Text)
+end)
+
+-- Click outside to hide dropdown
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local mousePos = UserInputService:GetMouseLocation()
+        local dropAbsPos = DropFrame.AbsolutePosition
+        local dropSize = DropFrame.AbsoluteSize
+
+        if not (mousePos.X >= dropAbsPos.X and mousePos.X <= dropAbsPos.X + dropSize.X and
+                mousePos.Y >= dropAbsPos.Y and mousePos.Y <= dropAbsPos.Y + dropSize.Y) then
+            hideDropdown()
+        end
+    end
+end)
 -- ═══════════════════════════════════════════
 --              AUTO PANEL
 -- ═══════════════════════════════════════════
