@@ -1106,11 +1106,11 @@ mainLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 end)
 
 -- ═══════════════════════════════════════════
---              COLLAPSIBLE SECTION
+--              COLLAPSIBLE SECTION (FIXED)
 -- ═══════════════════════════════════════════
 local function CreateCollapsibleSection(parent, title, icon)
     local isExpanded = false
-    local contentHeight = 200 -- Fixed height for scrollable content
+    local buttonList = {} -- Store buttons to calculate height
     
     -- Section Container
     local container = Instance.new("Frame")
@@ -1166,7 +1166,7 @@ local function CreateCollapsibleSection(parent, title, icon)
     content.ClipsDescendants = true
     content.Parent = container
     
-    -- Scrolling Frame for content (always scrollable)
+    -- Scrolling Frame for content
     local contentScroll = Instance.new("ScrollingFrame")
     contentScroll.Size = UDim2.new(1, 0, 1, 0)
     contentScroll.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
@@ -1175,7 +1175,6 @@ local function CreateCollapsibleSection(parent, title, icon)
     contentScroll.ScrollBarThickness = 3
     contentScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
     contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     contentScroll.Parent = content
     Instance.new("UICorner", contentScroll).CornerRadius = UDim.new(0, 6)
     
@@ -1184,20 +1183,15 @@ local function CreateCollapsibleSection(parent, title, icon)
     contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
     contentLayout.Parent = contentScroll
     
-    -- Function to update container size
-    local function UpdateSize()
-        if isExpanded then
-            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
-            content.Size = UDim2.new(1, 0, 0, contentHeight)
+    -- Function to update content height based on actual button count
+    local function UpdateContentHeight()
+        local buttonCount = #buttonList
+        if buttonCount == 0 then
+            contentHeight = 60 -- Height for "no locations" message
         else
-            container.Size = UDim2.new(1, -16, 0, 48)
-            content.Size = UDim2.new(1, 0, 0, 0)
+            contentHeight = math.min(buttonCount * 40, 200) -- Max 200px, 40px per button
         end
-        -- Force layout update
-        task.wait()
-        if parent.Parent and parent.Parent:IsA("ScrollingFrame") then
-            parent.Parent.CanvasSize = UDim2.new(0, 0, 0, parent.Parent.CanvasSize.Y.Offset)
-        end
+        return contentHeight
     end
     
     -- Toggle Function
@@ -1206,11 +1200,14 @@ local function CreateCollapsibleSection(parent, title, icon)
         local targetArrow = isExpanded and "▼" or "▶"
         
         if isExpanded then
+            local newHeight = UpdateContentHeight()
+            content.Size = UDim2.new(1, 0, 0, newHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + newHeight)
             TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-                Size = UDim2.new(1, 0, 0, contentHeight)
+                Size = UDim2.new(1, 0, 0, newHeight)
             }):Play()
             TweenService:Create(container, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-                Size = UDim2.new(1, -16, 0, 48 + contentHeight)
+                Size = UDim2.new(1, -16, 0, 48 + newHeight)
             }):Play()
         else
             TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
@@ -1229,35 +1226,38 @@ local function CreateCollapsibleSection(parent, title, icon)
             BackgroundTransparency = isExpanded and 0.2 or 0.4
         }):Play()
         
-        -- Update layout
-        task.delay(0.3, function()
-            if parent.Parent and parent.Parent:IsA("ScrollingFrame") then
-                parent.Parent.CanvasSize = UDim2.new(0, 0, 0, parent.Parent.CanvasSize.Y.Offset)
-            end
-        end)
+        -- Force canvas update
+        task.wait(0.3)
+        ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, mainLayout.AbsoluteContentSize.Y + 20)
     end
     
     header.MouseButton1Click:Connect(ToggleSection)
     
     -- Function to refresh content
     local function RefreshContent(buttons)
+        buttonList = buttons
         -- Clear existing
         for _, child in ipairs(contentScroll:GetChildren()) do
-            if child:IsA("TextButton") or child:IsA("TextLabel") or child:IsA("Frame") then
-                if child ~= contentLayout then
-                    child:Destroy()
-                end
+            if child:IsA("TextButton") or child:IsA("TextLabel") then
+                child:Destroy()
             end
         end
         
-        -- Add buttons
+        -- Add new buttons
         for _, btn in ipairs(buttons) do
             btn.Parent = contentScroll
         end
         
-        -- Update canvas size after buttons added
+        -- Update canvas size for scrolling
         task.wait(0.1)
         contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentScroll.CanvasSize.Y.Offset)
+        
+        -- Update height if expanded
+        if isExpanded then
+            local newHeight = UpdateContentHeight()
+            content.Size = UDim2.new(1, 0, 0, newHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + newHeight)
+        end
     end
     
     return container, contentScroll, RefreshContent, ToggleSection
