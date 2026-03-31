@@ -1091,6 +1091,113 @@ ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ScrollFrame.Parent = TeleportPanel
 
 -- ═══════════════════════════════════════════
+--              COLLAPSIBLE SECTIONS SYSTEM
+-- ═══════════════════════════════════════════
+local CollapsibleSections = {}
+
+local function CreateCollapsibleSection(parent, title, icon, yOffset)
+    local sectionHeight = 40
+    local isExpanded = false
+    
+    -- Section Container
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -16, 0, sectionHeight)
+    container.Position = UDim2.new(0, 8, 0, yOffset)
+    container.BackgroundTransparency = 1
+    container.ClipsDescendants = false
+    container.Parent = parent
+    
+    -- Header Button
+    local header = Instance.new("TextButton")
+    header.Size = UDim2.new(1, 0, 0, sectionHeight)
+    header.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    header.BackgroundTransparency = 0.4
+    header.Text = ""
+    header.AutoButtonColor = false
+    header.Parent = container
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+    
+    local headerStroke = Instance.new("UIStroke")
+    headerStroke.Color = Color3.fromRGB(156, 39, 176)
+    headerStroke.Thickness = 1
+    headerStroke.Transparency = 0.6
+    headerStroke.Parent = header
+    
+    -- Title Label
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -50, 1, 0)
+    titleLabel.Position = UDim2.new(0, 12, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = icon .. "  " .. title
+    titleLabel.TextColor3 = Color3.fromRGB(176, 48, 196)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 13
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = header
+    
+    -- Expand/Collapse Arrow
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 30, 1, 0)
+    arrow.Position = UDim2.new(1, -40, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "▶"
+    arrow.TextColor3 = Color3.fromRGB(156, 39, 176)
+    arrow.Font = Enum.Font.GothamBold
+    arrow.TextSize = 14
+    arrow.TextXAlignment = Enum.TextXAlignment.Center
+    arrow.Parent = header
+    
+    -- Content Container (starts collapsed)
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1, 0, 0, 0)
+    content.Position = UDim2.new(0, 0, 0, sectionHeight + 4)
+    content.BackgroundTransparency = 1
+    content.ClipsDescendants = true
+    content.Parent = container
+    
+    -- Content Scrolling Frame
+    local contentScroll = Instance.new("ScrollingFrame")
+    contentScroll.Size = UDim2.new(1, 0, 1, 0)
+    contentScroll.BackgroundTransparency = 1
+    contentScroll.BorderSizePixel = 0
+    contentScroll.ScrollBarThickness = 2
+    contentScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
+    contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    contentScroll.Parent = content
+    
+    local contentLayout = Instance.new("UIListLayout")
+    contentLayout.Padding = UDim.new(0, 4)
+    contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    contentLayout.Parent = contentScroll
+    
+    -- Toggle Function
+    local function ToggleSection()
+        isExpanded = not isExpanded
+        local targetHeight = isExpanded and 200 or 0
+        local targetArrow = isExpanded and "▼" or "▶"
+        
+        TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+            Size = UDim2.new(1, 0, 0, targetHeight)
+        }):Play()
+        
+        TweenService:Create(arrow, TweenInfo.new(0.2), {
+            Text = targetArrow
+        }):Play()
+        
+        TweenService:Create(header, TweenInfo.new(0.2), {
+            BackgroundTransparency = isExpanded and 0.2 or 0.4
+        }):Play()
+    end
+    
+    header.MouseButton1Click:Connect(ToggleSection)
+    
+    return container, contentScroll, contentLayout, function()
+        return isExpanded
+    end
+end
+
+-- ═══════════════════════════════════════════
 --              TELEPORT HELPER FUNCTIONS
 -- ═══════════════════════════════════════════
 local function _GetChar() return LocalPlayer.Character end
@@ -1188,10 +1295,9 @@ end
 -- ═══════════════════════════════════════════
 --              EVIL THEMED TELEPORT BUTTONS
 -- ═══════════════════════════════════════════
-local function MakeTpButton(parent, displayText, yOffset, onClick)
+local function MakeTpButton(parent, displayText, onClick)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -16, 0, 30)
-    btn.Position = UDim2.new(0, 8, 0, yOffset)
+    btn.Size = UDim2.new(1, 0, 0, 32)
     btn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
     btn.BackgroundTransparency = 0.4
     btn.TextColor3 = Color3.fromRGB(200, 160, 220)
@@ -1202,7 +1308,7 @@ local function MakeTpButton(parent, displayText, yOffset, onClick)
     btn.AutoButtonColor = false
     btn.ClipsDescendants = true
     btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft = UDim.new(0, 12)
@@ -1231,67 +1337,8 @@ local function MakeTpButton(parent, displayText, yOffset, onClick)
     return btn
 end
 
-local function MakeSectionLabel(parent, title, yOffset)
-    local lbl = Instance.new("TextLabel")
-    lbl.Text = title
-    lbl.Size = UDim2.new(1, -16, 0, 22)
-    lbl.Position = UDim2.new(0, 8, 0, yOffset)
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = Color3.fromRGB(176, 48, 196)
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 12
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = parent
-
-    local div = Instance.new("Frame")
-    div.Size = UDim2.new(1, -16, 0, 1)
-    div.Position = UDim2.new(0, 8, 0, yOffset + 24)
-    div.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
-    div.BackgroundTransparency = 0.5
-    div.BorderSizePixel = 0
-    div.Parent = parent
-
-    return yOffset + 32
-end
-
-local function BuildSearchSection(outerScroll, headerTitle, icon, items, outerYOff)
-    outerYOff = MakeSectionLabel(outerScroll, headerTitle, outerYOff)
-
-    local ITEM_H = 30
-    local ITEM_GAP = 4
-    local VISIBLE_MAX = 5
-    local visibleItems = math.min(#items, VISIBLE_MAX)
-    local innerH = visibleItems * (ITEM_H + ITEM_GAP) - ITEM_GAP
-
-    local innerScroll = Instance.new("ScrollingFrame")
-    innerScroll.Size = UDim2.new(1, -16, 0, innerH)
-    innerScroll.Position = UDim2.new(0, 8, 0, outerYOff)
-    innerScroll.BackgroundTransparency = 1
-    innerScroll.BorderSizePixel = 0
-    innerScroll.ScrollBarThickness = 2
-    innerScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
-    innerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    innerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    innerScroll.Parent = outerScroll
-
-    outerYOff = outerYOff + innerH + 12
-
-    local btnY = 0
-    for _, item in ipairs(items) do
-        local capturedName = item.name
-        local capturedGetPos = item.getPos
-        local btn = MakeTpButton(innerScroll, icon .. "  " .. capturedName, btnY, function()
-            StartTravel(capturedName, capturedGetPos())
-        end)
-        btn.Size = UDim2.new(1, 0, 0, ITEM_H)
-        btnY = btnY + ITEM_H + ITEM_GAP
-    end
-
-    return outerYOff
-end
-
 -- ═══════════════════════════════════════════
---              COLLECT TELEPORT LOCATIONS
+--              DYNAMIC LOCATION COLLECTION
 -- ═══════════════════════════════════════════
 local raidItems = {}
 local dungeonItems = {}
@@ -1299,188 +1346,176 @@ local worldItems = {}
 local questItems = {}
 local dragonBallQuests = {}
 
--- Scan Interactable folder for Raids and Dungeons
-local interactFolder = Workspace:FindFirstChild("Interactable")
-if interactFolder then
-    for _, obj in ipairs(interactFolder:GetChildren()) do
-        local pos = GetObjPos(obj)
-        if pos then
-            local capturedName = obj.Name
-            local capturedPos = pos
-
-            -- Raids
-            if capturedName:sub(1, 4):lower() == "raid" then
-                local cleanName = capturedName:gsub("^[Rr]aid[_ ]?", "")
-                table.insert(raidItems, {
-                    name = cleanName,
-                    getPos = function()
-                        local f = Workspace:FindFirstChild("Interactable")
-                        local o = f and f:FindFirstChild(capturedName)
-                        return (o and GetObjPos(o)) or capturedPos
-                    end,
-                })
-            -- Dungeons
-            elseif capturedName:sub(1, 15):lower() == "dungeonentrance" or capturedName:lower():find("dungeon") then
-                local cleanName = capturedName:gsub("^[Dd]ungeon[Ee]ntrance[_ ]?", ""):gsub("^[Dd]ungeon[_ ]?", "")
-                table.insert(dungeonItems, {
-                    name = cleanName,
-                    getPos = function()
-                        local f = Workspace:FindFirstChild("Interactable")
-                        local o = f and f:FindFirstChild(capturedName)
-                        return (o and GetObjPos(o)) or capturedPos
-                    end,
-                })
-            -- World Teleports
-            else
-                table.insert(worldItems, {
-                    name = capturedName,
-                    getPos = function()
-                        local f = Workspace:FindFirstChild("Interactable")
-                        local o = f and f:FindFirstChild(capturedName)
-                        return (o and GetObjPos(o)) or capturedPos
-                    end,
-                })
-            end
-        end
-    end
-end
-
--- Scan FriendlyNpcs for Quest Givers
-local friendlyNpcs = Workspace:FindFirstChild("FriendlyNpcs")
-if friendlyNpcs then
-    for _, npc in ipairs(friendlyNpcs:GetDescendants()) do
-        if npc:IsA("Model") or npc:IsA("BasePart") then
-            local name = npc.Name
-            local nameLow = name:lower()
-            local isQuest = nameLow:find("quest") or nameLow:find("give") or nameLow:find("npc")
-            local isDragonBall = nameLow:find("dragon") or nameLow:find("ball")
-
-            local pos = GetObjPos(npc)
+local function RefreshLocations()
+    -- Clear existing
+    raidItems = {}
+    dungeonItems = {}
+    worldItems = {}
+    questItems = {}
+    dragonBallQuests = {}
+    
+    -- Scan Interactable folder
+    local interactFolder = Workspace:FindFirstChild("Interactable")
+    if interactFolder then
+        for _, obj in ipairs(interactFolder:GetChildren()) do
+            local pos = GetObjPos(obj)
             if pos then
-                local capturedName = name
+                local capturedName = obj.Name
                 local capturedPos = pos
-                local entry = {
-                    name = capturedName,
-                    getPos = function()
-                        local f = Workspace:FindFirstChild("FriendlyNpcs")
-                        local o = f and f:FindFirstChild(capturedName, true)
-                        return (o and GetObjPos(o)) or capturedPos
-                    end,
-                }
-                if isDragonBall then
-                    table.insert(dragonBallQuests, entry)
-                elseif isQuest then
-                    table.insert(questItems, entry)
+                
+                if capturedName:sub(1, 4):lower() == "raid" then
+                    local cleanName = capturedName:gsub("^[Rr]aid[_ ]?", "")
+                    table.insert(raidItems, {
+                        name = cleanName,
+                        getPos = function()
+                            local f = Workspace:FindFirstChild("Interactable")
+                            local o = f and f:FindFirstChild(capturedName)
+                            return (o and GetObjPos(o)) or capturedPos
+                        end,
+                    })
+                elseif capturedName:sub(1, 15):lower() == "dungeonentrance" or capturedName:lower():find("dungeon") then
+                    local cleanName = capturedName:gsub("^[Dd]ungeon[Ee]ntrance[_ ]?", ""):gsub("^[Dd]ungeon[_ ]?", "")
+                    table.insert(dungeonItems, {
+                        name = cleanName,
+                        getPos = function()
+                            local f = Workspace:FindFirstChild("Interactable")
+                            local o = f and f:FindFirstChild(capturedName)
+                            return (o and GetObjPos(o)) or capturedPos
+                        end,
+                    })
+                else
+                    table.insert(worldItems, {
+                        name = capturedName,
+                        getPos = function()
+                            local f = Workspace:FindFirstChild("Interactable")
+                            local o = f and f:FindFirstChild(capturedName)
+                            return (o and GetObjPos(o)) or capturedPos
+                        end,
+                    })
                 end
             end
         end
     end
+    
+    -- Scan FriendlyNpcs for Quest Givers and Dragon Ball Quests
+    local friendlyNpcs = Workspace:FindFirstChild("FriendlyNpcs")
+    if friendlyNpcs then
+        for _, npc in ipairs(friendlyNpcs:GetDescendants()) do
+            if npc:IsA("Model") or npc:IsA("BasePart") then
+                local name = npc.Name
+                local nameLow = name:lower()
+                local isQuest = nameLow:find("questgive") or nameLow:find("quest give") or nameLow:find("quest")
+                local isDragonBall = nameLow:find("dragonball") or nameLow:find("dragon ball") or nameLow:find("dragon")
+                
+                local pos = GetObjPos(npc)
+                if pos then
+                    local capturedName = name
+                    local capturedPos = pos
+                    local entry = {
+                        name = capturedName,
+                        getPos = function()
+                            local f = Workspace:FindFirstChild("FriendlyNpcs")
+                            local o = f and f:FindFirstChild(capturedName, true)
+                            return (o and GetObjPos(o)) or capturedPos
+                        end,
+                    }
+                    if isDragonBall then
+                        table.insert(dragonBallQuests, entry)
+                    elseif isQuest then
+                        table.insert(questItems, entry)
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Sort all lists alphabetically
+    local function sortItems(items)
+        table.sort(items, function(a, b) return a.name:lower() < b.name:lower() end)
+    end
+    
+    sortItems(raidItems)
+    sortItems(dungeonItems)
+    sortItems(worldItems)
+    sortItems(questItems)
+    sortItems(dragonBallQuests)
 end
-
--- Sort all lists alphabetically
-local function sortItems(items)
-    table.sort(items, function(a, b) return a.name:lower() < b.name:lower() end)
-end
-
-sortItems(raidItems)
-sortItems(dungeonItems)
-sortItems(worldItems)
-sortItems(questItems)
-sortItems(dragonBallQuests)
 
 -- ═══════════════════════════════════════════
 --              BUILD TELEPORT UI
 -- ═══════════════════════════════════════════
-local yOff = 8
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.new(1, 0, 1, 0)
+mainContainer.BackgroundTransparency = 1
+mainContainer.Parent = ScrollFrame
 
--- Quick Teleport Section
-yOff = MakeSectionLabel(ScrollFrame, "⚡ QUICK TELEPORTS", yOff)
+local mainLayout = Instance.new("UIListLayout")
+mainLayout.Padding = UDim.new(0, 8)
+mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+mainLayout.Parent = mainContainer
+
+-- Quick Teleport Section (always visible, no collapse needed)
+local quickHeader = Instance.new("Frame")
+quickHeader.Size = UDim2.new(1, -16, 0, 40)
+quickHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+quickHeader.BackgroundTransparency = 0.4
+quickHeader.Parent = mainContainer
+Instance.new("UICorner", quickHeader).CornerRadius = UDim.new(0, 8)
+
+local quickTitle = Instance.new("TextLabel")
+quickTitle.Size = UDim2.new(1, 0, 1, 0)
+quickTitle.Position = UDim2.new(0, 12, 0, 0)
+quickTitle.BackgroundTransparency = 1
+quickTitle.Text = "⚡  QUICK TELEPORTS"
+quickTitle.TextColor3 = Color3.fromRGB(176, 48, 196)
+quickTitle.Font = Enum.Font.GothamBold
+quickTitle.TextSize = 13
+quickTitle.TextXAlignment = Enum.TextXAlignment.Left
+quickTitle.Parent = quickHeader
 
 -- Namekian Ship
-local interactFolderCheck = Workspace:FindFirstChild("Interactable")
-local ship = interactFolderCheck and interactFolderCheck:FindFirstChild("NamekianShip")
-if ship then
-    local pos = GetObjPos(ship)
-    if pos then
-        MakeTpButton(ScrollFrame, "🚀  Namekian Ship", yOff, function()
-            local f = Workspace:FindFirstChild("Interactable")
-            local s = f and f:FindFirstChild("NamekianShip")
-            local newPos = (s and GetObjPos(s)) or pos
-            StartTravel("Namekian Ship", newPos)
-        end)
-        yOff = yOff + 34
-    end
-end
-
--- Spawn Point
-MakeTpButton(ScrollFrame, "⭐  Spawn Point", yOff, function()
-    local spawn = Workspace:FindFirstChild("SpawnLocation") or Workspace:FindFirstChild("Spawn")
-    if spawn then
-        local pos = GetObjPos(spawn) or Vector3.new(0, 10, 0)
-        StartTravel("Spawn Point", pos)
+local shipBtn = MakeTpButton(mainContainer, "🚀  Namekian Ship", function()
+    local interactFolder = Workspace:FindFirstChild("Interactable")
+    local ship = interactFolder and interactFolder:FindFirstChild("NamekianShip")
+    if ship then
+        local pos = GetObjPos(ship)
+        if pos then StartTravel("Namekian Ship", pos) end
     end
 end)
-yOff = yOff + 34
+shipBtn.Size = UDim2.new(1, -16, 0, 32)
 
--- Raids Section
-if #raidItems > 0 then
-    yOff = BuildSearchSection(ScrollFrame, "⚔️ RAIDS", "🗡️", raidItems, yOff)
-else
-    local noLabel = Instance.new("TextLabel")
-    noLabel.Size = UDim2.new(1, -16, 0, 24)
-    noLabel.Position = UDim2.new(0, 8, 0, yOff)
-    noLabel.BackgroundTransparency = 1
-    noLabel.Text = "  No raid locations found."
-    noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-    noLabel.Font = Enum.Font.Gotham
-    noLabel.TextSize = 11
-    noLabel.TextXAlignment = Enum.TextXAlignment.Left
-    noLabel.Parent = ScrollFrame
-    yOff = yOff + 28
-end
+-- Create Collapsible Sections
+local raidSection, raidContent, raidLayout, isRaidExpanded = CreateCollapsibleSection(mainContainer, "RAIDS", "⚔️", 0)
+local dungeonSection, dungeonContent, dungeonLayout, isDungeonExpanded = CreateCollapsibleSection(mainContainer, "DUNGEONS", "🏰", 0)
+local worldSection, worldContent, worldLayout, isWorldExpanded = CreateCollapsibleSection(mainContainer, "WORLD LOCATIONS", "🌍", 0)
+local questSection, questContent, questLayout, isQuestExpanded = CreateCollapsibleSection(mainContainer, "QUEST GIVERS", "📜", 0)
+local dragonSection, dragonContent, dragonLayout, isDragonExpanded = CreateCollapsibleSection(mainContainer, "DRAGON BALL QUESTS", "🐉", 0)
 
--- Dungeons Section
-if #dungeonItems > 0 then
-    yOff = BuildSearchSection(ScrollFrame, "🏰 DUNGEONS", "🔮", dungeonItems, yOff)
-else
-    local noLabel = Instance.new("TextLabel")
-    noLabel.Size = UDim2.new(1, -16, 0, 24)
-    noLabel.Position = UDim2.new(0, 8, 0, yOff)
-    noLabel.BackgroundTransparency = 1
-    noLabel.Text = "  No dungeon entrances found."
-    noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-    noLabel.Font = Enum.Font.Gotham
-    noLabel.TextSize = 11
-    noLabel.TextXAlignment = Enum.TextXAlignment.Left
-    noLabel.Parent = ScrollFrame
-    yOff = yOff + 28
-end
+-- Custom Teleport Section (always visible)
+local customHeader = Instance.new("Frame")
+customHeader.Size = UDim2.new(1, -16, 0, 40)
+customHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+customHeader.BackgroundTransparency = 0.4
+customHeader.Parent = mainContainer
+Instance.new("UICorner", customHeader).CornerRadius = UDim.new(0, 8)
 
--- World Teleports Section
-if #worldItems > 0 then
-    yOff = BuildSearchSection(ScrollFrame, "🌍 WORLD LOCATIONS", "📍", worldItems, yOff)
-end
+local customTitle = Instance.new("TextLabel")
+customTitle.Size = UDim2.new(1, 0, 1, 0)
+customTitle.Position = UDim2.new(0, 12, 0, 0)
+customTitle.BackgroundTransparency = 1
+customTitle.Text = "🔧  CUSTOM TELEPORT"
+customTitle.TextColor3 = Color3.fromRGB(176, 48, 196)
+customTitle.Font = Enum.Font.GothamBold
+customTitle.TextSize = 13
+customTitle.TextXAlignment = Enum.TextXAlignment.Left
+customTitle.Parent = customHeader
 
--- Quest Givers Section
-if #questItems > 0 then
-    yOff = BuildSearchSection(ScrollFrame, "📜 QUEST GIVERS", "❓", questItems, yOff)
-end
-
--- Dragon Ball Quests Section
-if #dragonBallQuests > 0 then
-    yOff = BuildSearchSection(ScrollFrame, "🐉 DRAGON BALL QUESTS", "⭐", dragonBallQuests, yOff)
-end
-
--- Custom Teleport Input
-yOff = MakeSectionLabel(ScrollFrame, "🔧 CUSTOM TELEPORT", yOff)
-
-local CustomFrame = Instance.new("Frame")
-CustomFrame.Size = UDim2.new(1, -16, 0, 70)
-CustomFrame.Position = UDim2.new(0, 8, 0, yOff)
-CustomFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
-CustomFrame.BackgroundTransparency = 0.4
-CustomFrame.Parent = ScrollFrame
-Instance.new("UICorner", CustomFrame).CornerRadius = UDim.new(0, 8)
+local customFrame = Instance.new("Frame")
+customFrame.Size = UDim2.new(1, -16, 0, 70)
+customFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+customFrame.BackgroundTransparency = 0.4
+customFrame.Parent = mainContainer
+Instance.new("UICorner", customFrame).CornerRadius = UDim.new(0, 8)
 
 local CustomInput = Instance.new("TextBox")
 CustomInput.Size = UDim2.new(1, -20, 0, 32)
@@ -1493,7 +1528,7 @@ CustomInput.Text = ""
 CustomInput.TextColor3 = Color3.fromRGB(200, 180, 210)
 CustomInput.Font = Enum.Font.Gotham
 CustomInput.TextSize = 11
-CustomInput.Parent = CustomFrame
+CustomInput.Parent = customFrame
 Instance.new("UICorner", CustomInput).CornerRadius = UDim.new(0, 6)
 
 local CustomBtn = Instance.new("TextButton")
@@ -1506,7 +1541,7 @@ CustomBtn.TextColor3 = Color3.fromRGB(196, 96, 216)
 CustomBtn.Font = Enum.Font.GothamBold
 CustomBtn.TextSize = 11
 CustomBtn.AutoButtonColor = false
-CustomBtn.Parent = CustomFrame
+CustomBtn.Parent = customFrame
 Instance.new("UICorner", CustomBtn).CornerRadius = UDim.new(0, 6)
 
 CustomBtn.MouseButton1Click:Connect(function()
@@ -1519,7 +1554,6 @@ CustomBtn.MouseButton1Click:Connect(function()
     if #coords >= 3 then
         StartTravel("Custom", Vector3.new(coords[1], coords[2], coords[3]))
     else
-        -- Try to find player
         local targetPlayer = Players:FindFirstChild(input)
         if targetPlayer and targetPlayer.Character then
             local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -1539,12 +1573,138 @@ CustomBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Function to refresh all section content
+local function RefreshAllSections()
+    RefreshLocations()
+    
+    -- Clear all content containers
+    for _, child in ipairs(raidContent:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    for _, child in ipairs(dungeonContent:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    for _, child in ipairs(worldContent:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    for _, child in ipairs(questContent:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    for _, child in ipairs(dragonContent:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    
+    -- Add "No locations found" labels if empty
+    if #raidItems == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 32)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ No raid locations found"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noLabel.Parent = raidContent
+    else
+        for _, item in ipairs(raidItems) do
+            MakeTpButton(raidContent, "🗡️  " .. item.name, function()
+                StartTravel(item.name, item.getPos())
+            end)
+        end
+    end
+    
+    if #dungeonItems == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 32)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ No dungeon locations found"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noLabel.Parent = dungeonContent
+    else
+        for _, item in ipairs(dungeonItems) do
+            MakeTpButton(dungeonContent, "🔮  " .. item.name, function()
+                StartTravel(item.name, item.getPos())
+            end)
+        end
+    end
+    
+    if #worldItems == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 32)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ No world locations found"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noLabel.Parent = worldContent
+    else
+        for _, item in ipairs(worldItems) do
+            MakeTpButton(worldContent, "📍  " .. item.name, function()
+                StartTravel(item.name, item.getPos())
+            end)
+        end
+    end
+    
+    if #questItems == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 32)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ No quest givers found"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noLabel.Parent = questContent
+    else
+        for _, item in ipairs(questItems) do
+            MakeTpButton(questContent, "❓  " .. item.name, function()
+                StartTravel(item.name, item.getPos())
+            end)
+        end
+    end
+    
+    if #dragonBallQuests == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 32)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ No Dragon Ball quests available"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        noLabel.Parent = dragonContent
+    else
+        for _, item in ipairs(dragonBallQuests) do
+            MakeTpButton(dragonContent, "⭐  " .. item.name, function()
+                StartTravel(item.name, item.getPos())
+            end)
+        end
+    end
+end
+
+-- Initial refresh
+RefreshAllSections()
+
+-- Auto-refresh world locations every 5 seconds
+task.spawn(function()
+    while TeleportPanel and TeleportPanel.Parent do
+        task.wait(5)
+        if TeleportPanel.Visible then
+            RefreshAllSections()
+        end
+    end
+end)
+
 -- Cancel Flight Button
 CancelBtn.MouseButton1Click:Connect(function()
     stopFly()
 end)
 
--- Add some floating particles to the teleport panel for effect
+-- Add floating particles effect
 local TeleportParticles = Instance.new("Frame")
 TeleportParticles.Size = UDim2.new(1, 0, 1, 0)
 TeleportParticles.BackgroundTransparency = 1
@@ -1570,7 +1730,6 @@ task.spawn(function()
         task.delay(3, function() particle:Destroy() end)
     end
 end)
-
 -- ═══════════════════════════════════════════
 --              INFO PANEL
 -- ═══════════════════════════════════════════
