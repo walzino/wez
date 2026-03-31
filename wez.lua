@@ -1091,25 +1091,23 @@ ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ScrollFrame.Parent = TeleportPanel
 
 -- ═══════════════════════════════════════════
---              COLLAPSIBLE SECTIONS SYSTEM
+--              COLLAPSIBLE SECTIONS SYSTEM (FIXED)
 -- ═══════════════════════════════════════════
-local CollapsibleSections = {}
 
-local function CreateCollapsibleSection(parent, title, icon, yOffset)
-    local sectionHeight = 40
+local function CreateCollapsibleSection(parent, title, icon)
     local isExpanded = false
+    local contentHeight = 0
     
     -- Section Container
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, -16, 0, sectionHeight)
-    container.Position = UDim2.new(0, 8, 0, yOffset)
+    container.Size = UDim2.new(1, -16, 0, 44)
     container.BackgroundTransparency = 1
     container.ClipsDescendants = false
     container.Parent = parent
     
     -- Header Button
     local header = Instance.new("TextButton")
-    header.Size = UDim2.new(1, 0, 0, sectionHeight)
+    header.Size = UDim2.new(1, 0, 0, 44)
     header.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
     header.BackgroundTransparency = 0.4
     header.Text = ""
@@ -1150,12 +1148,12 @@ local function CreateCollapsibleSection(parent, title, icon, yOffset)
     -- Content Container (starts collapsed)
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, 0, 0, 0)
-    content.Position = UDim2.new(0, 0, 0, sectionHeight + 4)
+    content.Position = UDim2.new(0, 0, 0, 48)
     content.BackgroundTransparency = 1
     content.ClipsDescendants = true
     content.Parent = container
     
-    -- Content Scrolling Frame
+    -- Content Scrolling Frame (for scrollable content inside)
     local contentScroll = Instance.new("ScrollingFrame")
     contentScroll.Size = UDim2.new(1, 0, 1, 0)
     contentScroll.BackgroundTransparency = 1
@@ -1171,15 +1169,45 @@ local function CreateCollapsibleSection(parent, title, icon, yOffset)
     contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
     contentLayout.Parent = contentScroll
     
+    -- Function to update container size based on content
+    local function UpdateContainerSize()
+        if isExpanded then
+            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
+            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
+            content.Size = UDim2.new(1, 0, 0, contentHeight)
+        else
+            container.Size = UDim2.new(1, -16, 0, 48)
+            content.Size = UDim2.new(1, 0, 0, 0)
+        end
+    end
+    
     -- Toggle Function
     local function ToggleSection()
         isExpanded = not isExpanded
-        local targetHeight = isExpanded and 200 or 0
         local targetArrow = isExpanded and "▼" or "▶"
         
-        TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
-            Size = UDim2.new(1, 0, 0, targetHeight)
-        }):Play()
+        if isExpanded then
+            -- Expand: set content height first, then animate
+            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
+            content.Size = UDim2.new(1, 0, 0, contentHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
+            TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(1, 0, 0, contentHeight)
+            }):Play()
+        else
+            -- Collapse: animate to zero
+            TweenService:Create(content, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(1, 0, 0, 0)
+            }):Play()
+            TweenService:Create(container, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {
+                Size = UDim2.new(1, -16, 0, 48)
+            }):Play()
+            task.delay(0.26, function()
+                if not isExpanded then
+                    content.Size = UDim2.new(1, 0, 0, 0)
+                end
+            end)
+        end
         
         TweenService:Create(arrow, TweenInfo.new(0.2), {
             Text = targetArrow
@@ -1188,13 +1216,41 @@ local function CreateCollapsibleSection(parent, title, icon, yOffset)
         TweenService:Create(header, TweenInfo.new(0.2), {
             BackgroundTransparency = isExpanded and 0.2 or 0.4
         }):Play()
+        
+        -- Force layout update
+        task.wait(0.05)
+        local parent = container.Parent
+        if parent and parent:IsA("ScrollingFrame") then
+            parent.CanvasSize = UDim2.new(0, 0, 0, parent.CanvasSize.Y.Offset)
+        end
     end
     
     header.MouseButton1Click:Connect(ToggleSection)
     
-    return container, contentScroll, contentLayout, function()
-        return isExpanded
+    -- Function to refresh content and update height
+    local function RefreshContent(buttons)
+        -- Clear existing
+        for _, child in ipairs(contentScroll:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then
+                child:Destroy()
+            end
+        end
+        
+        -- Add buttons
+        for _, btn in ipairs(buttons) do
+            btn.Parent = contentScroll
+        end
+        
+        -- Update canvas size
+        task.wait(0.05)
+        if isExpanded then
+            contentHeight = contentScroll.CanvasSize.Y.Offset + 8
+            content.Size = UDim2.new(1, 0, 0, contentHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + contentHeight)
+        end
     end
+    
+    return container, contentScroll, RefreshContent, function() return isExpanded end
 end
 
 -- ═══════════════════════════════════════════
@@ -1347,14 +1403,12 @@ local questItems = {}
 local dragonBallQuests = {}
 
 local function RefreshLocations()
-    -- Clear existing
     raidItems = {}
     dungeonItems = {}
     worldItems = {}
     questItems = {}
     dragonBallQuests = {}
     
-    -- Scan Interactable folder
     local interactFolder = Workspace:FindFirstChild("Interactable")
     if interactFolder then
         for _, obj in ipairs(interactFolder:GetChildren()) do
@@ -1397,7 +1451,6 @@ local function RefreshLocations()
         end
     end
     
-    -- Scan FriendlyNpcs for Quest Givers and Dragon Ball Quests
     local friendlyNpcs = Workspace:FindFirstChild("FriendlyNpcs")
     if friendlyNpcs then
         for _, npc in ipairs(friendlyNpcs:GetDescendants()) do
@@ -1429,7 +1482,6 @@ local function RefreshLocations()
         end
     end
     
-    -- Sort all lists alphabetically
     local function sortItems(items)
         table.sort(items, function(a, b) return a.name:lower() < b.name:lower() end)
     end
@@ -1454,9 +1506,9 @@ mainLayout.Padding = UDim.new(0, 8)
 mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
 mainLayout.Parent = mainContainer
 
--- Quick Teleport Section (always visible, no collapse needed)
+-- Quick Teleport Section
 local quickHeader = Instance.new("Frame")
-quickHeader.Size = UDim2.new(1, -16, 0, 40)
+quickHeader.Size = UDim2.new(1, -16, 0, 44)
 quickHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 quickHeader.BackgroundTransparency = 0.4
 quickHeader.Parent = mainContainer
@@ -1473,8 +1525,13 @@ quickTitle.TextSize = 13
 quickTitle.TextXAlignment = Enum.TextXAlignment.Left
 quickTitle.Parent = quickHeader
 
--- Namekian Ship
-local shipBtn = MakeTpButton(mainContainer, "🚀  Namekian Ship", function()
+-- Namekian Ship Button (inside quick teleport area)
+local shipContainer = Instance.new("Frame")
+shipContainer.Size = UDim2.new(1, -16, 0, 40)
+shipContainer.BackgroundTransparency = 1
+shipContainer.Parent = mainContainer
+
+local shipBtn = MakeTpButton(shipContainer, "🚀  Namekian Ship", function()
     local interactFolder = Workspace:FindFirstChild("Interactable")
     local ship = interactFolder and interactFolder:FindFirstChild("NamekianShip")
     if ship then
@@ -1482,18 +1539,18 @@ local shipBtn = MakeTpButton(mainContainer, "🚀  Namekian Ship", function()
         if pos then StartTravel("Namekian Ship", pos) end
     end
 end)
-shipBtn.Size = UDim2.new(1, -16, 0, 32)
+shipBtn.Size = UDim2.new(1, 0, 0, 36)
 
 -- Create Collapsible Sections
-local raidSection, raidContent, raidLayout, isRaidExpanded = CreateCollapsibleSection(mainContainer, "RAIDS", "⚔️", 0)
-local dungeonSection, dungeonContent, dungeonLayout, isDungeonExpanded = CreateCollapsibleSection(mainContainer, "DUNGEONS", "🏰", 0)
-local worldSection, worldContent, worldLayout, isWorldExpanded = CreateCollapsibleSection(mainContainer, "WORLD LOCATIONS", "🌍", 0)
-local questSection, questContent, questLayout, isQuestExpanded = CreateCollapsibleSection(mainContainer, "QUEST GIVERS", "📜", 0)
-local dragonSection, dragonContent, dragonLayout, isDragonExpanded = CreateCollapsibleSection(mainContainer, "DRAGON BALL QUESTS", "🐉", 0)
+local raidContainer, raidScroll, RefreshRaid, _ = CreateCollapsibleSection(mainContainer, "RAIDS", "⚔️")
+local dungeonContainer, dungeonScroll, RefreshDungeon, _ = CreateCollapsibleSection(mainContainer, "DUNGEONS", "🏰")
+local worldContainer, worldScroll, RefreshWorld, _ = CreateCollapsibleSection(mainContainer, "WORLD LOCATIONS", "🌍")
+local questContainer, questScroll, RefreshQuest, _ = CreateCollapsibleSection(mainContainer, "QUEST GIVERS", "📜")
+local dragonContainer, dragonScroll, RefreshDragon, _ = CreateCollapsibleSection(mainContainer, "DRAGON BALL QUESTS", "🐉")
 
--- Custom Teleport Section (always visible)
+-- Custom Teleport Section
 local customHeader = Instance.new("Frame")
-customHeader.Size = UDim2.new(1, -16, 0, 40)
+customHeader.Size = UDim2.new(1, -16, 0, 44)
 customHeader.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 customHeader.BackgroundTransparency = 0.4
 customHeader.Parent = mainContainer
@@ -1511,14 +1568,14 @@ customTitle.TextXAlignment = Enum.TextXAlignment.Left
 customTitle.Parent = customHeader
 
 local customFrame = Instance.new("Frame")
-customFrame.Size = UDim2.new(1, -16, 0, 70)
+customFrame.Size = UDim2.new(1, -16, 0, 80)
 customFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
 customFrame.BackgroundTransparency = 0.4
 customFrame.Parent = mainContainer
 Instance.new("UICorner", customFrame).CornerRadius = UDim.new(0, 8)
 
 local CustomInput = Instance.new("TextBox")
-CustomInput.Size = UDim2.new(1, -20, 0, 32)
+CustomInput.Size = UDim2.new(1, -20, 0, 36)
 CustomInput.Position = UDim2.new(0, 10, 0, 8)
 CustomInput.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
 CustomInput.BackgroundTransparency = 0.3
@@ -1532,8 +1589,8 @@ CustomInput.Parent = customFrame
 Instance.new("UICorner", CustomInput).CornerRadius = UDim.new(0, 6)
 
 local CustomBtn = Instance.new("TextButton")
-CustomBtn.Size = UDim2.new(1, -20, 0, 28)
-CustomBtn.Position = UDim2.new(0, 10, 0, 44)
+CustomBtn.Size = UDim2.new(1, -20, 0, 32)
+CustomBtn.Position = UDim2.new(0, 10, 0, 48)
 CustomBtn.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
 CustomBtn.BackgroundTransparency = 0.3
 CustomBtn.Text = "TELEPORT TO COORDINATES"
@@ -1577,113 +1634,34 @@ end)
 local function RefreshAllSections()
     RefreshLocations()
     
-    -- Clear all content containers
-    for _, child in ipairs(raidContent:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    for _, child in ipairs(dungeonContent:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    for _, child in ipairs(worldContent:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    for _, child in ipairs(questContent:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
-    end
-    for _, child in ipairs(dragonContent:GetChildren()) do
-        if child:IsA("TextButton") then child:Destroy() end
+    -- Helper to create button list
+    local function CreateButtonList(items, icon)
+        local buttons = {}
+        if #items == 0 then
+            local noLabel = Instance.new("TextLabel")
+            noLabel.Size = UDim2.new(1, 0, 0, 32)
+            noLabel.BackgroundTransparency = 1
+            noLabel.Text = "  ⚠ No locations found"
+            noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+            noLabel.Font = Enum.Font.Gotham
+            noLabel.TextSize = 11
+            noLabel.TextXAlignment = Enum.TextXAlignment.Left
+            table.insert(buttons, noLabel)
+        else
+            for _, item in ipairs(items) do
+                table.insert(buttons, MakeTpButton(nil, icon .. "  " .. item.name, function()
+                    StartTravel(item.name, item.getPos())
+                end))
+            end
+        end
+        return buttons
     end
     
-    -- Add "No locations found" labels if empty
-    if #raidItems == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 32)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "  ⚠ No raid locations found"
-        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextSize = 11
-        noLabel.TextXAlignment = Enum.TextXAlignment.Left
-        noLabel.Parent = raidContent
-    else
-        for _, item in ipairs(raidItems) do
-            MakeTpButton(raidContent, "🗡️  " .. item.name, function()
-                StartTravel(item.name, item.getPos())
-            end)
-        end
-    end
-    
-    if #dungeonItems == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 32)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "  ⚠ No dungeon locations found"
-        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextSize = 11
-        noLabel.TextXAlignment = Enum.TextXAlignment.Left
-        noLabel.Parent = dungeonContent
-    else
-        for _, item in ipairs(dungeonItems) do
-            MakeTpButton(dungeonContent, "🔮  " .. item.name, function()
-                StartTravel(item.name, item.getPos())
-            end)
-        end
-    end
-    
-    if #worldItems == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 32)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "  ⚠ No world locations found"
-        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextSize = 11
-        noLabel.TextXAlignment = Enum.TextXAlignment.Left
-        noLabel.Parent = worldContent
-    else
-        for _, item in ipairs(worldItems) do
-            MakeTpButton(worldContent, "📍  " .. item.name, function()
-                StartTravel(item.name, item.getPos())
-            end)
-        end
-    end
-    
-    if #questItems == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 32)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "  ⚠ No quest givers found"
-        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextSize = 11
-        noLabel.TextXAlignment = Enum.TextXAlignment.Left
-        noLabel.Parent = questContent
-    else
-        for _, item in ipairs(questItems) do
-            MakeTpButton(questContent, "❓  " .. item.name, function()
-                StartTravel(item.name, item.getPos())
-            end)
-        end
-    end
-    
-    if #dragonBallQuests == 0 then
-        local noLabel = Instance.new("TextLabel")
-        noLabel.Size = UDim2.new(1, 0, 0, 32)
-        noLabel.BackgroundTransparency = 1
-        noLabel.Text = "  ⚠ No Dragon Ball quests available"
-        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
-        noLabel.Font = Enum.Font.Gotham
-        noLabel.TextSize = 11
-        noLabel.TextXAlignment = Enum.TextXAlignment.Left
-        noLabel.Parent = dragonContent
-    else
-        for _, item in ipairs(dragonBallQuests) do
-            MakeTpButton(dragonContent, "⭐  " .. item.name, function()
-                StartTravel(item.name, item.getPos())
-            end)
-        end
-    end
+    RefreshRaid(CreateButtonList(raidItems, "🗡️"))
+    RefreshDungeon(CreateButtonList(dungeonItems, "🔮"))
+    RefreshWorld(CreateButtonList(worldItems, "📍"))
+    RefreshQuest(CreateButtonList(questItems, "❓"))
+    RefreshDragon(CreateButtonList(dragonBallQuests, "⭐"))
 end
 
 -- Initial refresh
