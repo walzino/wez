@@ -2426,8 +2426,6 @@ AutoPanel.Visible = false
 AutoPanel.Parent = ContentArea
 ContentPanels["Auto"] = AutoPanel
 
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
 -- Create a scrolling frame for the autofarmer UI
 local AutoScroll = Instance.new("ScrollingFrame")
 AutoScroll.Size = UDim2.new(1, 0, 1, 0)
@@ -3062,6 +3060,10 @@ local function StopFarming()
 end
 
 local function GetNextTarget()
+    if #SelectedNPCs == 0 then
+        StopFarming()
+        return
+    end
     AutoFarmerState.CurrentTargetIndex = AutoFarmerState.CurrentTargetIndex % #SelectedNPCs + 1
     AutoFarmerState.CurrentTarget = SelectedNPCs[AutoFarmerState.CurrentTargetIndex]
     AutoFarmerState.CurrentTargetModel = AutoFarmerState.CurrentTarget.model
@@ -3315,6 +3317,7 @@ end)
 -- Initial update
 task.wait(1)
 UpdateNPCListAuto()
+
 -- ═══════════════════════════════════════════
 --              INTERACTABLES PANEL
 -- ═══════════════════════════════════════════
