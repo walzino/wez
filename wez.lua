@@ -2393,18 +2393,371 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     end
 end)
 -- ═══════════════════════════════════════════
---              AUTO PANEL
+--              ESP SEARCH & TELEPORT PANEL
 -- ═══════════════════════════════════════════
-local AutoPanel = Instance.new("Frame")
-AutoPanel.Name = "AutoPanel"
-AutoPanel.Size = UDim2.new(1, 0, 1, 0)
-AutoPanel.BackgroundTransparency = 1
-AutoPanel.Visible = false
-AutoPanel.Parent = ContentArea
-ContentPanels["Auto"] = AutoPanel
+local ESPPanel = Instance.new("Frame")
+ESPPanel.Name = "ESPPanel"
+ESPPanel.Size = UDim2.new(1, 0, 1, 0)
+ESPPanel.BackgroundTransparency = 1
+ESPPanel.Visible = false
+ESPPanel.Parent = ContentArea
+ContentPanels["Auto"] = ESPPanel   -- replace Auto with ESP panel
 
--- [AUTO PANEL CONTENT - Same as original but with evil colors]
+-- Scrolling frame for the whole panel
+local ESPScroll = Instance.new("ScrollingFrame")
+ESPScroll.Size = UDim2.new(1, 0, 1, 0)
+ESPScroll.BackgroundTransparency = 1
+ESPScroll.BorderSizePixel = 0
+ESPScroll.ScrollBarThickness = 3
+ESPScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
+ESPScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+ESPScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+ESPScroll.Parent = ESPPanel
 
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.new(1, 0, 0, 0)
+mainContainer.BackgroundTransparency = 1
+mainContainer.Parent = ESPScroll
+
+local mainLayout = Instance.new("UIListLayout")
+mainLayout.Padding = UDim.new(0, 8)
+mainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+mainLayout.Parent = mainContainer
+
+mainLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    mainContainer.Size = UDim2.new(1, 0, 0, mainLayout.AbsoluteContentSize.Y)
+    ESPScroll.CanvasSize = UDim2.new(0, 0, 0, mainLayout.AbsoluteContentSize.Y + 20)
+end)
+
+-- Global search box
+local SearchFrame = Instance.new("Frame")
+SearchFrame.Size = UDim2.new(1, -16, 0, 48)
+SearchFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+SearchFrame.BackgroundTransparency = 0.4
+SearchFrame.Parent = mainContainer
+Instance.new("UICorner", SearchFrame).CornerRadius = UDim.new(0, 8)
+
+local SearchBox = Instance.new("TextBox")
+SearchBox.Size = UDim2.new(1, -20, 1, 0)
+SearchBox.Position = UDim2.new(0, 10, 0, 0)
+SearchBox.BackgroundTransparency = 1
+SearchBox.PlaceholderText = "🔍 Search across all categories..."
+SearchBox.PlaceholderColor3 = Color3.fromRGB(128, 64, 144)
+SearchBox.Text = ""
+SearchBox.TextColor3 = Color3.fromRGB(200, 180, 210)
+SearchBox.Font = Enum.Font.Gotham
+SearchBox.TextSize = 12
+SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+SearchBox.ClearTextOnFocus = false
+SearchBox.Parent = SearchFrame
+
+-- Helper to make teleport buttons (reuse the evil‑themed button maker)
+local function MakeESPTpButton(displayText, onClick)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 36)
+    btn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    btn.BackgroundTransparency = 0.4
+    btn.TextColor3 = Color3.fromRGB(200, 160, 220)
+    btn.Text = displayText
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.AutoButtonColor = false
+    btn.ClipsDescendants = true
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.Parent = btn
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(156, 39, 176)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.7
+    stroke.Parent = btn
+    
+    btn.MouseEnter:Connect(function()
+        if not flying then
+            TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.2, TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.12), {Transparency = 0.2, Thickness = 1.5}):Play()
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.4, TextColor3 = Color3.fromRGB(200, 160, 220)}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Transparency = 0.7, Thickness = 1}):Play()
+    end)
+    btn.MouseButton1Click:Connect(onClick)
+    return btn
+end
+
+-- Collapsible section (reuses the same logic as Teleport panel)
+local function CreateCollapsibleSection(parent, title, icon)
+    local isExpanded = false
+    local buttonList = {}
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -16, 0, 48)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local header = Instance.new("TextButton")
+    header.Size = UDim2.new(1, 0, 0, 48)
+    header.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    header.BackgroundTransparency = 0.4
+    header.Text = ""
+    header.AutoButtonColor = false
+    header.Parent = container
+    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
+    
+    local headerStroke = Instance.new("UIStroke")
+    headerStroke.Color = Color3.fromRGB(156, 39, 176)
+    headerStroke.Thickness = 1
+    headerStroke.Transparency = 0.6
+    headerStroke.Parent = header
+    
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -50, 1, 0)
+    titleLabel.Position = UDim2.new(0, 12, 0, 0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Text = icon .. "  " .. title
+    titleLabel.TextColor3 = Color3.fromRGB(176, 48, 196)
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.TextSize = 13
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = header
+    
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.new(0, 30, 1, 0)
+    arrow.Position = UDim2.new(1, -40, 0, 0)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "▶"
+    arrow.TextColor3 = Color3.fromRGB(156, 39, 176)
+    arrow.Font = Enum.Font.GothamBold
+    arrow.TextSize = 14
+    arrow.TextXAlignment = Enum.TextXAlignment.Center
+    arrow.Parent = header
+    
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1, 0, 0, 0)
+    content.Position = UDim2.new(0, 0, 0, 52)
+    content.BackgroundTransparency = 1
+    content.ClipsDescendants = true
+    content.Parent = container
+    
+    local contentScroll = Instance.new("ScrollingFrame")
+    contentScroll.Size = UDim2.new(1, 0, 1, 0)
+    contentScroll.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
+    contentScroll.BackgroundTransparency = 0.3
+    contentScroll.BorderSizePixel = 0
+    contentScroll.ScrollBarThickness = 3
+    contentScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
+    contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    contentScroll.Parent = content
+    Instance.new("UICorner", contentScroll).CornerRadius = UDim.new(0, 6)
+    
+    local contentLayout = Instance.new("UIListLayout")
+    contentLayout.Padding = UDim.new(0, 4)
+    contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    contentLayout.Parent = contentScroll
+    
+    local function UpdateContentHeight()
+        local buttonCount = #buttonList
+        local contentHeight = buttonCount == 0 and 60 or math.min(buttonCount * 40, 200)
+        return contentHeight
+    end
+    
+    local function ToggleSection()
+        isExpanded = not isExpanded
+        local targetArrow = isExpanded and "▼" or "▶"
+        if isExpanded then
+            local newHeight = UpdateContentHeight()
+            content.Size = UDim2.new(1, 0, 0, newHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + newHeight)
+            TweenService:Create(content, TweenInfo.new(0.25), {Size = UDim2.new(1, 0, 0, newHeight)}):Play()
+            TweenService:Create(container, TweenInfo.new(0.25), {Size = UDim2.new(1, -16, 0, 48 + newHeight)}):Play()
+        else
+            TweenService:Create(content, TweenInfo.new(0.25), {Size = UDim2.new(1, 0, 0, 0)}):Play()
+            TweenService:Create(container, TweenInfo.new(0.25), {Size = UDim2.new(1, -16, 0, 48)}):Play()
+        end
+        TweenService:Create(arrow, TweenInfo.new(0.2), {Text = targetArrow}):Play()
+        TweenService:Create(header, TweenInfo.new(0.2), {BackgroundTransparency = isExpanded and 0.2 or 0.4}):Play()
+        task.wait(0.3)
+        mainContainer.Size = UDim2.new(1, 0, 0, mainLayout.AbsoluteContentSize.Y)
+        ESPScroll.CanvasSize = UDim2.new(0, 0, 0, mainLayout.AbsoluteContentSize.Y + 20)
+    end
+    
+    header.MouseButton1Click:Connect(ToggleSection)
+    
+    local function RefreshContent(buttons)
+        buttonList = buttons
+        for _, child in ipairs(contentScroll:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+        end
+        for _, btn in ipairs(buttons) do
+            btn.Parent = contentScroll
+        end
+        task.wait(0.1)
+        contentScroll.CanvasSize = UDim2.new(0, 0, 0, contentScroll.CanvasSize.Y.Offset)
+        if isExpanded then
+            local newHeight = UpdateContentHeight()
+            content.Size = UDim2.new(1, 0, 0, newHeight)
+            container.Size = UDim2.new(1, -16, 0, 48 + newHeight)
+        end
+    end
+    
+    return container, contentScroll, RefreshContent, ToggleSection
+end
+
+-- Data storage
+local categories = {
+    Interactable = { folder = nil, items = {}, container = nil, refresh = nil },
+    FriendlyNpcs  = { folder = nil, items = {}, container = nil, refresh = nil },
+    Enemies       = { folder = nil, items = {}, container = nil, refresh = nil },
+    AreaParts     = { folder = nil, items = {}, container = nil, refresh = nil },
+    Live          = { folder = nil, items = {}, container = nil, refresh = nil },
+}
+
+-- Helper to get object position (reuse GetObjPos)
+local function GetPosition(obj)
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Model") then
+        local p = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildOfClass("BasePart")
+        if p then return p.Position end
+        local ok, cf = pcall(function() return obj:GetModelCFrame() end)
+        if ok then return cf.Position end
+    end
+    return nil
+end
+
+-- Refresh a specific category
+local function RefreshCategory(catName)
+    local cat = categories[catName]
+    if not cat then return end
+    
+    local folder = Workspace:FindFirstChild(catName)
+    cat.folder = folder
+    local newItems = {}
+    
+    if folder then
+        for _, obj in ipairs(folder:GetChildren()) do
+            if obj:IsA("Model") or obj:IsA("BasePart") then
+                local name = obj.Name
+                local pos = GetPosition(obj)
+                if pos then
+                    table.insert(newItems, { name = name, obj = obj, pos = pos })
+                end
+            end
+        end
+    end
+    
+    -- For Live folder, also include players (they are in Live but also need to get their character parts)
+    if catName == "Live" and folder then
+        -- Already scanning Live's children; but also ensure we get up‑to‑date positions
+        -- The above loop already covers them.
+    end
+    
+    table.sort(newItems, function(a,b) return a.name:lower() < b.name:lower() end)
+    cat.items = newItems
+    
+    -- Build buttons
+    local buttons = {}
+    for _, item in ipairs(newItems) do
+        local btn = MakeESPTpButton("📍 " .. item.name, function()
+            StartTravel(item.name, item.pos)
+        end)
+        table.insert(buttons, btn)
+    end
+    if #buttons == 0 then
+        local noLabel = Instance.new("TextLabel")
+        noLabel.Size = UDim2.new(1, 0, 0, 36)
+        noLabel.BackgroundTransparency = 1
+        noLabel.Text = "  ⚠ Nothing found"
+        noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+        noLabel.Font = Enum.Font.Gotham
+        noLabel.TextSize = 11
+        noLabel.TextXAlignment = Enum.TextXAlignment.Left
+        table.insert(buttons, noLabel)
+    end
+    if cat.refresh then cat.refresh(buttons) end
+end
+
+-- Global search filter
+local function ApplySearchFilter(query)
+    query = query:lower()
+    for catName, cat in pairs(categories) do
+        local filtered = {}
+        for _, item in ipairs(cat.items) do
+            if item.name:lower():find(query, 1, true) then
+                table.insert(filtered, item)
+            end
+        end
+        local buttons = {}
+        for _, item in ipairs(filtered) do
+            local btn = MakeESPTpButton("📍 " .. item.name, function()
+                StartTravel(item.name, item.pos)
+            end)
+            table.insert(buttons, btn)
+        end
+        if #buttons == 0 then
+            local noLabel = Instance.new("TextLabel")
+            noLabel.Size = UDim2.new(1, 0, 0, 36)
+            noLabel.BackgroundTransparency = 1
+            noLabel.Text = "  ⚠ No matches"
+            noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+            noLabel.Font = Enum.Font.Gotham
+            noLabel.TextSize = 11
+            noLabel.TextXAlignment = Enum.TextXAlignment.Left
+            table.insert(buttons, noLabel)
+        end
+        if cat.refresh then cat.refresh(buttons) end
+    end
+end
+
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = SearchBox.Text
+    if q == "" then
+        -- Reset to full lists
+        for catName, _ in pairs(categories) do
+            RefreshCategory(catName)
+        end
+    else
+        ApplySearchFilter(q)
+    end
+end)
+
+-- Create collapsible sections for each category
+local icons = {
+    Interactable = "🏛️",
+    FriendlyNpcs  = "👥",
+    Enemies       = "👹",
+    AreaParts     = "🗺️",
+    Live          = "👤",
+}
+
+for catName, cat in pairs(categories) do
+    local container, _, refreshFunc = CreateCollapsibleSection(mainContainer, catName, icons[catName])
+    cat.container = container
+    cat.refresh = refreshFunc
+end
+
+-- Initial load
+task.spawn(function()
+    task.wait(1)
+    for catName, _ in pairs(categories) do
+        RefreshCategory(catName)
+    end
+end)
+
+-- Auto‑refresh every 5 seconds (only when panel is visible)
+task.spawn(function()
+    while ESPPanel and ESPPanel.Parent do
+        task.wait(5)
+        if ESPPanel.Visible then
+            for catName, _ in pairs(categories) do
+                RefreshCategory(catName)
+            end
+        end
+    end
+end)
 -- ═══════════════════════════════════════════
 --              INTERACTABLES PANEL
 -- ═══════════════════════════════════════════
