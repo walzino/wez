@@ -1044,7 +1044,7 @@ MakeSection(CombatPanel, "HIT PART", 200)
 local GetHitPart = MakeOptionPicker(CombatPanel, "Part", {"Head", "Torso", "HumanoidRootPart"}, "Head", 226)
 
 -- ═══════════════════════════════════════════
---              TELEPORT PANEL
+--              TELEPORT PANEL (EVIL EDITION)
 -- ═══════════════════════════════════════════
 local TeleportPanel = Instance.new("Frame")
 TeleportPanel.Name = "TeleportPanel"
@@ -1090,8 +1090,486 @@ ScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 ScrollFrame.Parent = TeleportPanel
 
--- [TELEPORT CONTENT - Same as original but with evil colors]
--- (Keeping original teleport functionality, just the UI is themed)
+-- ═══════════════════════════════════════════
+--              TELEPORT HELPER FUNCTIONS
+-- ═══════════════════════════════════════════
+local function _GetChar() return LocalPlayer.Character end
+local function _GetHRP()
+    local c = _GetChar(); return c and c:FindFirstChild("HumanoidRootPart") or nil
+end
+local function _GetHum()
+    local c = _GetChar(); return c and c:FindFirstChildOfClass("Humanoid") or nil
+end
+local function _SetPlatformStand(on)
+    local h = _GetHum(); if h then pcall(function() h.PlatformStand = on end) end
+end
+local function _SetNoclip(en)
+    local c = _GetChar(); if not c then return end
+    for _, p in ipairs(c:GetDescendants()) do
+        if p:IsA("BasePart") then p.CanCollide = not en end
+    end
+end
+
+local function _StartNoclipLoop()
+    if noclipConn then noclipConn:Disconnect() end
+    noclipConn = RunService.Stepped:Connect(function()
+        if not flying then
+            noclipConn:Disconnect()
+            noclipConn = nil
+            return
+        end
+        _SetNoclip(true)
+    end)
+end
+
+local function stopFly()
+    flying = false
+    if flyConn then flyConn:Disconnect(); flyConn = nil end
+    _SetNoclip(false)
+    _SetPlatformStand(false)
+    local hrp = _GetHRP()
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
+    CancelBtn.Visible = false
+    TpStatusLabel.Text = "● IDLE"
+    TweenService:Create(TpStatusLabel, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(128, 64, 144)}):Play()
+end
+
+local function MoveStep(hrp, dest, dt)
+    local dir = dest - hrp.Position
+    local dist = dir.Magnitude
+    if dist < 0.5 then return true end
+
+    _SetPlatformStand(true)
+    local step = math.min(FLY_SPEED * dt, dist)
+    local newPos = hrp.Position + dir.Unit * step
+    hrp.CFrame = CFrame.new(newPos, newPos + dir.Unit)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+
+    return dist - step < ARRIVE_DIST
+end
+
+local function StartTravel(label, exactPos)
+    local hrp = _GetHRP(); if not hrp then return end
+    if flying then stopFly() end
+    local dest = Vector3.new(exactPos.X, exactPos.Y + Y_OFFSET, exactPos.Z)
+    TpStatusLabel.Text = "◈ " .. label:upper():sub(1, 24)
+    TweenService:Create(TpStatusLabel, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 210, 60)}):Play()
+    CancelBtn.Visible = true
+    flying = true
+    _SetNoclip(true)
+    _StartNoclipLoop()
+    flyConn = RunService.Heartbeat:Connect(function(dt)
+        if not flying then return end
+        local h = _GetHRP()
+        if not h or not h.Parent then stopFly(); return end
+        if MoveStep(h, dest, dt) then
+            stopFly()
+            TpStatusLabel.Text = "✓ " .. label:upper():sub(1, 24)
+            TweenService:Create(TpStatusLabel, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(176, 96, 216)}):Play()
+        end
+    end)
+end
+
+local function GetObjPos(obj)
+    if obj:IsA("BasePart") then return obj.Position end
+    if obj:IsA("Model") then
+        local p = obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildOfClass("BasePart")
+        if p then return p.Position end
+        local ok, cf = pcall(function() return obj:GetModelCFrame() end)
+        if ok then return cf.Position end
+    end
+    return nil
+end
+
+-- ═══════════════════════════════════════════
+--              EVIL THEMED TELEPORT BUTTONS
+-- ═══════════════════════════════════════════
+local function MakeTpButton(parent, displayText, yOffset, onClick)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -16, 0, 30)
+    btn.Position = UDim2.new(0, 8, 0, yOffset)
+    btn.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+    btn.BackgroundTransparency = 0.4
+    btn.TextColor3 = Color3.fromRGB(200, 160, 220)
+    btn.Text = displayText
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.AutoButtonColor = false
+    btn.ClipsDescendants = true
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(156, 39, 176)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.7
+    stroke.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        if not flying then
+            TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.2, TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.12), {Transparency = 0.2, Thickness = 1.5}):Play()
+        end
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.4, TextColor3 = Color3.fromRGB(200, 160, 220)}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.12), {Transparency = 0.7, Thickness = 1}):Play()
+    end)
+    btn.MouseButton1Click:Connect(function()
+        if flying then stopFly() else onClick() end
+    end)
+
+    return btn
+end
+
+local function MakeSectionLabel(parent, title, yOffset)
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = title
+    lbl.Size = UDim2.new(1, -16, 0, 22)
+    lbl.Position = UDim2.new(0, 8, 0, yOffset)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = Color3.fromRGB(176, 48, 196)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = parent
+
+    local div = Instance.new("Frame")
+    div.Size = UDim2.new(1, -16, 0, 1)
+    div.Position = UDim2.new(0, 8, 0, yOffset + 24)
+    div.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+    div.BackgroundTransparency = 0.5
+    div.BorderSizePixel = 0
+    div.Parent = parent
+
+    return yOffset + 32
+end
+
+local function BuildSearchSection(outerScroll, headerTitle, icon, items, outerYOff)
+    outerYOff = MakeSectionLabel(outerScroll, headerTitle, outerYOff)
+
+    local ITEM_H = 30
+    local ITEM_GAP = 4
+    local VISIBLE_MAX = 5
+    local visibleItems = math.min(#items, VISIBLE_MAX)
+    local innerH = visibleItems * (ITEM_H + ITEM_GAP) - ITEM_GAP
+
+    local innerScroll = Instance.new("ScrollingFrame")
+    innerScroll.Size = UDim2.new(1, -16, 0, innerH)
+    innerScroll.Position = UDim2.new(0, 8, 0, outerYOff)
+    innerScroll.BackgroundTransparency = 1
+    innerScroll.BorderSizePixel = 0
+    innerScroll.ScrollBarThickness = 2
+    innerScroll.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
+    innerScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    innerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    innerScroll.Parent = outerScroll
+
+    outerYOff = outerYOff + innerH + 12
+
+    local btnY = 0
+    for _, item in ipairs(items) do
+        local capturedName = item.name
+        local capturedGetPos = item.getPos
+        local btn = MakeTpButton(innerScroll, icon .. "  " .. capturedName, btnY, function()
+            StartTravel(capturedName, capturedGetPos())
+        end)
+        btn.Size = UDim2.new(1, 0, 0, ITEM_H)
+        btnY = btnY + ITEM_H + ITEM_GAP
+    end
+
+    return outerYOff
+end
+
+-- ═══════════════════════════════════════════
+--              COLLECT TELEPORT LOCATIONS
+-- ═══════════════════════════════════════════
+local raidItems = {}
+local dungeonItems = {}
+local worldItems = {}
+local questItems = {}
+local dragonBallQuests = {}
+
+-- Scan Interactable folder for Raids and Dungeons
+local interactFolder = Workspace:FindFirstChild("Interactable")
+if interactFolder then
+    for _, obj in ipairs(interactFolder:GetChildren()) do
+        local pos = GetObjPos(obj)
+        if pos then
+            local capturedName = obj.Name
+            local capturedPos = pos
+
+            -- Raids
+            if capturedName:sub(1, 4):lower() == "raid" then
+                local cleanName = capturedName:gsub("^[Rr]aid[_ ]?", "")
+                table.insert(raidItems, {
+                    name = cleanName,
+                    getPos = function()
+                        local f = Workspace:FindFirstChild("Interactable")
+                        local o = f and f:FindFirstChild(capturedName)
+                        return (o and GetObjPos(o)) or capturedPos
+                    end,
+                })
+            -- Dungeons
+            elseif capturedName:sub(1, 15):lower() == "dungeonentrance" or capturedName:lower():find("dungeon") then
+                local cleanName = capturedName:gsub("^[Dd]ungeon[Ee]ntrance[_ ]?", ""):gsub("^[Dd]ungeon[_ ]?", "")
+                table.insert(dungeonItems, {
+                    name = cleanName,
+                    getPos = function()
+                        local f = Workspace:FindFirstChild("Interactable")
+                        local o = f and f:FindFirstChild(capturedName)
+                        return (o and GetObjPos(o)) or capturedPos
+                    end,
+                })
+            -- World Teleports
+            else
+                table.insert(worldItems, {
+                    name = capturedName,
+                    getPos = function()
+                        local f = Workspace:FindFirstChild("Interactable")
+                        local o = f and f:FindFirstChild(capturedName)
+                        return (o and GetObjPos(o)) or capturedPos
+                    end,
+                })
+            end
+        end
+    end
+end
+
+-- Scan FriendlyNpcs for Quest Givers
+local friendlyNpcs = Workspace:FindFirstChild("FriendlyNpcs")
+if friendlyNpcs then
+    for _, npc in ipairs(friendlyNpcs:GetDescendants()) do
+        if npc:IsA("Model") or npc:IsA("BasePart") then
+            local name = npc.Name
+            local nameLow = name:lower()
+            local isQuest = nameLow:find("quest") or nameLow:find("give") or nameLow:find("npc")
+            local isDragonBall = nameLow:find("dragon") or nameLow:find("ball")
+
+            local pos = GetObjPos(npc)
+            if pos then
+                local capturedName = name
+                local capturedPos = pos
+                local entry = {
+                    name = capturedName,
+                    getPos = function()
+                        local f = Workspace:FindFirstChild("FriendlyNpcs")
+                        local o = f and f:FindFirstChild(capturedName, true)
+                        return (o and GetObjPos(o)) or capturedPos
+                    end,
+                }
+                if isDragonBall then
+                    table.insert(dragonBallQuests, entry)
+                elseif isQuest then
+                    table.insert(questItems, entry)
+                end
+            end
+        end
+    end
+end
+
+-- Sort all lists alphabetically
+local function sortItems(items)
+    table.sort(items, function(a, b) return a.name:lower() < b.name:lower() end)
+end
+
+sortItems(raidItems)
+sortItems(dungeonItems)
+sortItems(worldItems)
+sortItems(questItems)
+sortItems(dragonBallQuests)
+
+-- ═══════════════════════════════════════════
+--              BUILD TELEPORT UI
+-- ═══════════════════════════════════════════
+local yOff = 8
+
+-- Quick Teleport Section
+yOff = MakeSectionLabel(ScrollFrame, "⚡ QUICK TELEPORTS", yOff)
+
+-- Namekian Ship
+local interactFolderCheck = Workspace:FindFirstChild("Interactable")
+local ship = interactFolderCheck and interactFolderCheck:FindFirstChild("NamekianShip")
+if ship then
+    local pos = GetObjPos(ship)
+    if pos then
+        MakeTpButton(ScrollFrame, "🚀  Namekian Ship", yOff, function()
+            local f = Workspace:FindFirstChild("Interactable")
+            local s = f and f:FindFirstChild("NamekianShip")
+            local newPos = (s and GetObjPos(s)) or pos
+            StartTravel("Namekian Ship", newPos)
+        end)
+        yOff = yOff + 34
+    end
+end
+
+-- Spawn Point
+MakeTpButton(ScrollFrame, "⭐  Spawn Point", yOff, function()
+    local spawn = Workspace:FindFirstChild("SpawnLocation") or Workspace:FindFirstChild("Spawn")
+    if spawn then
+        local pos = GetObjPos(spawn) or Vector3.new(0, 10, 0)
+        StartTravel("Spawn Point", pos)
+    end
+end)
+yOff = yOff + 34
+
+-- Raids Section
+if #raidItems > 0 then
+    yOff = BuildSearchSection(ScrollFrame, "⚔️ RAIDS", "🗡️", raidItems, yOff)
+else
+    local noLabel = Instance.new("TextLabel")
+    noLabel.Size = UDim2.new(1, -16, 0, 24)
+    noLabel.Position = UDim2.new(0, 8, 0, yOff)
+    noLabel.BackgroundTransparency = 1
+    noLabel.Text = "  No raid locations found."
+    noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+    noLabel.Font = Enum.Font.Gotham
+    noLabel.TextSize = 11
+    noLabel.TextXAlignment = Enum.TextXAlignment.Left
+    noLabel.Parent = ScrollFrame
+    yOff = yOff + 28
+end
+
+-- Dungeons Section
+if #dungeonItems > 0 then
+    yOff = BuildSearchSection(ScrollFrame, "🏰 DUNGEONS", "🔮", dungeonItems, yOff)
+else
+    local noLabel = Instance.new("TextLabel")
+    noLabel.Size = UDim2.new(1, -16, 0, 24)
+    noLabel.Position = UDim2.new(0, 8, 0, yOff)
+    noLabel.BackgroundTransparency = 1
+    noLabel.Text = "  No dungeon entrances found."
+    noLabel.TextColor3 = Color3.fromRGB(128, 64, 144)
+    noLabel.Font = Enum.Font.Gotham
+    noLabel.TextSize = 11
+    noLabel.TextXAlignment = Enum.TextXAlignment.Left
+    noLabel.Parent = ScrollFrame
+    yOff = yOff + 28
+end
+
+-- World Teleports Section
+if #worldItems > 0 then
+    yOff = BuildSearchSection(ScrollFrame, "🌍 WORLD LOCATIONS", "📍", worldItems, yOff)
+end
+
+-- Quest Givers Section
+if #questItems > 0 then
+    yOff = BuildSearchSection(ScrollFrame, "📜 QUEST GIVERS", "❓", questItems, yOff)
+end
+
+-- Dragon Ball Quests Section
+if #dragonBallQuests > 0 then
+    yOff = BuildSearchSection(ScrollFrame, "🐉 DRAGON BALL QUESTS", "⭐", dragonBallQuests, yOff)
+end
+
+-- Custom Teleport Input
+yOff = MakeSectionLabel(ScrollFrame, "🔧 CUSTOM TELEPORT", yOff)
+
+local CustomFrame = Instance.new("Frame")
+CustomFrame.Size = UDim2.new(1, -16, 0, 70)
+CustomFrame.Position = UDim2.new(0, 8, 0, yOff)
+CustomFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 28)
+CustomFrame.BackgroundTransparency = 0.4
+CustomFrame.Parent = ScrollFrame
+Instance.new("UICorner", CustomFrame).CornerRadius = UDim.new(0, 8)
+
+local CustomInput = Instance.new("TextBox")
+CustomInput.Size = UDim2.new(1, -20, 0, 32)
+CustomInput.Position = UDim2.new(0, 10, 0, 8)
+CustomInput.BackgroundColor3 = Color3.fromRGB(12, 8, 18)
+CustomInput.BackgroundTransparency = 0.3
+CustomInput.PlaceholderText = "Enter coordinates (X, Y, Z) or player name..."
+CustomInput.PlaceholderColor3 = Color3.fromRGB(128, 64, 144)
+CustomInput.Text = ""
+CustomInput.TextColor3 = Color3.fromRGB(200, 180, 210)
+CustomInput.Font = Enum.Font.Gotham
+CustomInput.TextSize = 11
+CustomInput.Parent = CustomFrame
+Instance.new("UICorner", CustomInput).CornerRadius = UDim.new(0, 6)
+
+local CustomBtn = Instance.new("TextButton")
+CustomBtn.Size = UDim2.new(1, -20, 0, 28)
+CustomBtn.Position = UDim2.new(0, 10, 0, 44)
+CustomBtn.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+CustomBtn.BackgroundTransparency = 0.3
+CustomBtn.Text = "TELEPORT TO COORDINATES"
+CustomBtn.TextColor3 = Color3.fromRGB(196, 96, 216)
+CustomBtn.Font = Enum.Font.GothamBold
+CustomBtn.TextSize = 11
+CustomBtn.AutoButtonColor = false
+CustomBtn.Parent = CustomFrame
+Instance.new("UICorner", CustomBtn).CornerRadius = UDim.new(0, 6)
+
+CustomBtn.MouseButton1Click:Connect(function()
+    local input = CustomInput.Text
+    local coords = {}
+    for num in input:gmatch("[-]?%d+[.]?%d*") do
+        table.insert(coords, tonumber(num))
+    end
+    
+    if #coords >= 3 then
+        StartTravel("Custom", Vector3.new(coords[1], coords[2], coords[3]))
+    else
+        -- Try to find player
+        local targetPlayer = Players:FindFirstChild(input)
+        if targetPlayer and targetPlayer.Character then
+            local hrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                StartTravel(targetPlayer.Name, hrp.Position)
+            end
+        else
+            TpStatusLabel.Text = "✖ Invalid coordinates or player"
+            TweenService:Create(TpStatusLabel, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 80, 80)}):Play()
+            task.delay(2, function()
+                if TpStatusLabel.Text == "✖ Invalid coordinates or player" then
+                    TpStatusLabel.Text = "● IDLE"
+                    TweenService:Create(TpStatusLabel, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(128, 64, 144)}):Play()
+                end
+            end)
+        end
+    end
+end)
+
+-- Cancel Flight Button
+CancelBtn.MouseButton1Click:Connect(function()
+    stopFly()
+end)
+
+-- Add some floating particles to the teleport panel for effect
+local TeleportParticles = Instance.new("Frame")
+TeleportParticles.Size = UDim2.new(1, 0, 1, 0)
+TeleportParticles.BackgroundTransparency = 1
+TeleportParticles.Parent = TeleportPanel
+
+task.spawn(function()
+    while TeleportPanel and TeleportPanel.Parent and TeleportPanel.Visible do
+        task.wait(0.8)
+        local particle = Instance.new("Frame")
+        particle.Size = UDim2.new(0, 1, 0, 1)
+        particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
+        particle.BackgroundColor3 = Color3.fromRGB(156, 39, 176)
+        particle.BackgroundTransparency = 0.3
+        particle.BorderSizePixel = 0
+        particle.Parent = TeleportParticles
+        Instance.new("UICorner", particle).CornerRadius = UDim.new(1, 0)
+        
+        TweenService:Create(particle, TweenInfo.new(3, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(particle.Position.X.Scale + (math.random() - 0.5) * 0.1, 0,
+                                   particle.Position.Y.Scale + (math.random() - 0.5) * 0.1, 0),
+            BackgroundTransparency = 1
+        }):Play()
+        task.delay(3, function() particle:Destroy() end)
+    end
+end)
 
 -- ═══════════════════════════════════════════
 --              INFO PANEL
