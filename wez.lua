@@ -1951,6 +1951,7 @@ InfoScrollFrame.ScrollBarThickness = 3
 InfoScrollFrame.ScrollBarImageColor3 = Color3.fromRGB(156, 39, 176)
 InfoScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
 InfoScrollFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+InfoScrollFrame.ClipsDescendants = true  -- ADD THIS LINE - fixes overflow
 InfoScrollFrame.Parent = InfoPanel
 
 local InfoListLayout = Instance.new("UIListLayout")
